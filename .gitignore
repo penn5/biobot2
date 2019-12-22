@@ -1,0 +1,5 @@
+__pycache__
+/config.json
+/*.session
+translations.json
+poeditor_api_token.txt

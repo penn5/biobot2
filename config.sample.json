@@ -1,0 +1,32 @@
+{
+  "common": {
+    "group_id": -1001180504638
+  },
+  "backend": {
+    "ScraperBackend": {},
+    "UserbotBackend": [
+      {
+        "phone": "+10123456789",
+        "api_id": "123456",
+        "api_hash": "0123456789abcdef0123456789abcdef",
+        "auth_key": "leave this field blank to begin with."
+      }, {
+        "phone": "+19876543210",
+        "api_id": "123456",
+        "api_hash": "0123456789abcdef0123456789abcdef",
+        "auth_key": "leave this field blank to begin with, or remove the config entry entirely, or duplicate it"
+      }
+    ]
+  },
+  "frontend": {
+    "api_id": "123456",
+    "api_hash": "0123456789abcdef0123456789abcdef",
+    "bot_token": "",
+    "admissions_group": -100123456789,
+    "bot_group": -100123456789,
+    "data_group": -100123456789,
+    "rules_username": "username",
+    "extra_groups": [-100123456789],
+    "sudo_users": [123456789]
+  }
+}
