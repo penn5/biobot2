@@ -1,0 +1,4 @@
+telethon
+aiohttp
+lxml
+git+https://github.com/penn5/python-poeditor
