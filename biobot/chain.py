@@ -1,3 +1,19 @@
+#    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
+#    Copyright (C) 2019 Hackintosh Five
+
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as
+#    published by the Free Software Foundation, either version 3 of the
+#    License, or (at your option) any later version.
+
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import itertools
 
 
@@ -27,7 +43,8 @@ class Forest:
             return ret
 
     def __getstate__(self):
-        return {k: (v.username, v.uid, [child.username for child in v.children], v.extras) for k, v in self._instances.items()}
+        return {k: (v.username, v.uid, [child.username for child in v.children], v.extras)
+                for k, v in self._instances.items()}
 
     def __setstate__(self, state):
         self._instances = {}
@@ -57,7 +74,8 @@ class User:
 
     def _repr(self, instances):
         if self not in instances:
-            return "{" + self.username + ": [" + ", ".join(child._repr(instances + [self]) for child in self.children) + "]}"
+            return "{" + self.username + ": [" + ", ".join(child._repr(instances + [self])
+                                                           for child in self.children) + "]}"
         else:
             return f"(recursive loop to {self.username})"
 
@@ -116,6 +134,7 @@ def make_all_chains(data):
         ret.append(max_stack)
     return forest, ret
 
+
 def _iter_parents(leaf, current_stack=[], ignore=[]):
     if leaf in ignore:
         return [current_stack]
@@ -144,4 +163,3 @@ def _iter_children(leaf, current_stack=[], ignore=[]):
     if not yielded:
         # It's the end of the path. Begin leaf yields
         yield new_stack
-

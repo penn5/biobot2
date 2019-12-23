@@ -1,13 +1,27 @@
+#    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
+#    Copyright (C) 2019 Hackintosh Five
+
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU Affero General Public License as
+#    published by the Free Software Foundation, either version 3 of the
+#    License, or (at your option) any later version.
+
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU Affero General Public License for more details.
+
+#    You should have received a copy of the GNU Affero General Public License
+#    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 import functools
 import telethon
 import io
 import pickle
-from telethon.tl.types import MessageEntityMentionName
 from telethon.tl.custom.button import Button
 from . import core
 from .translations import tr
 import logging
-import string
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +31,7 @@ def error_handler(func):
     async def wrapper(self, event):
         try:
             return await func(self, event)
-        except:
+        except Exception:
             await event.reply(await tr(event, "fatal_error"))
             raise
     return wrapper
@@ -102,7 +116,10 @@ class BioBot:
         new = await event.reply(await tr(event, "please_wait"))
         forest, chain = await core.get_chain(self.target, await self._select_backend(event))
         data = await self._store_data(forest)
-        await new.edit((await tr(event, "chain_format")).format(len(chain), data, (await tr(event, "chain_delim")).join(user.username for user in chain)))
+        await new.edit((await tr(event, "chain_format")).format(len(chain), data,
+                                                                (await tr(event, "chain_delim")).join(user.username
+                                                                                                      for user in
+                                                                                                      chain)))
 
     @error_handler
     @protected
@@ -128,7 +145,8 @@ class BioBot:
                 await self.client.delete_messages(self.admissions_entity.id, int(msg[4:12], 16))
                 return
             if msg.startswith("help"):
-                buttons = [Button.url(await tr(event, "return_to_group"), "t.me/c/{}/{}".format(self.admissions_entity.id, int(msg[5:13], 16)))]
+                buttons = [Button.url(await tr(event, "return_to_group"),
+                                      "t.me/c/{}/{}".format(self.admissions_entity.id, int(msg[5:13], 16)))]
                 if msg[4] == "s":
                     await event.respond((await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
                     return
@@ -180,7 +198,7 @@ class BioBot:
 
     async def callback_query_join(self, event, message):
         try:
-            await message.edit(await tr(event, "loading_1m"), buttons=None)  # We need to fetch the message for 2 reasons
+            await message.edit(await tr(event, "loading_1m"), buttons=None)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             await event.answer(await tr(event, "button_loading"))
             return
@@ -213,7 +231,8 @@ class BioBot:
             await message.edit(await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), data)],
                                         [Button.inline(await tr(event, "cancel"), b"c" + data[1:])],
-                                        [Button.inline(await tr(event, "get_help"), b"h" + data[1:5] + b"j" + data[5:])]])
+                                        [Button.inline(await tr(event, "get_help"),
+                                                       b"h" + data[1:5] + b"j" + data[5:])]])
             msg = (await tr(event, "set_bio")).format(data[5:].decode("ascii"))
             try:
                 await event.answer(msg, alert=True)
