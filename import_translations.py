@@ -45,7 +45,7 @@ for lang in langs:
         exported = json.load(out)
     data.setdefault(lang["code"][:2], {}).update({term["term"]: term["definition"] for term in exported})
 
-json.dump(data, open("translations.json", "w"))
+json.dump(data, open("translations.json", "w"), indent=2, sort_keys=True)
 
 if needs_write:
     with open("poeditor_api_token.txt", "w") as token_file:
