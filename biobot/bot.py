@@ -92,8 +92,10 @@ class BioBot:
                                                                  + eoc_regex + "(?:#data)?(\d+)"))
         self.client.add_event_handler(self.start_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/start\s?(.*)"))
-        self.client.add_event_handler(self.user_joined,
+        self.client.add_event_handler(self.user_joined_admission,
                                       telethon.events.ChatAction(chats=self.admissions_group))
+        self.client.add_event_handler(self.user_joined_main,
+                                      telethon.events.ChatAction(chats=self.main_group))
         self.client.add_event_handler(self.callback_query,
                                       telethon.events.CallbackQuery())
         self.admissions_entity = await self.client.get_entity(self.admissions_group)
@@ -159,11 +161,17 @@ class BioBot:
         await event.respond((await tr(event, "pm_start")).format(self.target))
 
     @error_handler
-    async def user_joined(self, event):
+    async def user_joined_admission(self, event):
         if event.user_joined or event.user_added:
             cb = event.user_id.to_bytes(4, "big")
             await event.reply(await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
+
+    @error_handler
+    async def user_joined_main(self, event):
+        if event.user_joined or event.user_added:
+            await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(event.chat_id))
+            await self.chain_command(event)
 
     @error_handler
     async def callback_query(self, event):
@@ -268,10 +276,10 @@ class BioBot:
         await message.delete()
 
     async def _select_backend(self, event):
-        if event.pattern_match[1] is not None:
+        if getattr(event, "pattern_match", (None, None))[1] is not None:
             message = await self._fetch_data(int(event.pattern_match[1]))
             return pickle.loads(await message.download_media(bytes))
-        if event.is_reply:
+        if getattr(event, "is_reply", None):
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
                 if event.from_id in self.sudo_users:
