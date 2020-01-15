@@ -90,6 +90,9 @@ class BioBot:
         self.client.add_event_handler(self.fetchdata_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/fetchdata"
                                                                  + eoc_regex + "(?:#data)?(\d+)"))
+        self.client.add_event_handler(self.diff_command,
+                                      telethon.events.NewMessage(incoming=True, pattern="/diff"
+                                                                 + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
         self.client.add_event_handler(self.start_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/start\s?(.*)"))
         self.client.add_event_handler(self.user_joined_admission,
@@ -136,6 +139,38 @@ class BioBot:
     @protected
     async def fetchdata_command(self, event):
         await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
+
+    @error_handler
+    @protected
+    async def diff_command(self, event):
+        new = await event.reply(await tr(event, "please_wait"))
+        backend = await self._select_backend(event, default_backend=False)
+        if not backend:
+            await event.reply(await tr(event, "invalid_id"))
+            return
+#        print(backend, await self._select_backend(event)
+        forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
+        data = await self._store_data(forest)
+        print(data, diff)
+        new_uids, gone_uids, username_replacements, username_changes, new_bios, gone_bios = diff
+        delim = await tr(event, "diff_delim")
+        new_uids = delim.join(_format_user(user) for user in new_uids)
+        gone_uids = delim.join(_format_user(user) for user in gone_uids)
+        username_delim = await tr(event, "diff_username_delim")
+        username_replacements = delim.join(_format_user(user1) + username_delim + _format_user(user2)
+                                           for user1, user2 in username_replacements)
+        username_changes = delim.join(_format_user(user1) + username_delim + _format_user(user2)
+                                           for user1, user2 in username_changes)
+        parent_delim = await tr(event, "diff_parents_delim")
+        new_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
+                                           + username_delim + user
+                                           for parent1, parent2, user in new_bios)
+        gone_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
+                                           + username_delim + user
+                                           for parent1, parent2, user in gone_bios)
+
+        await event.reply((await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
+                                                                  username_changes, new_bios, gone_bios))
 
     async def start_command(self, event):
         if not event.is_private:
@@ -275,18 +310,25 @@ class BioBot:
         await event.answer(await tr(message, "cancelled"), alert=True)
         await message.delete()
 
-    async def _select_backend(self, event):
-        if getattr(event, "pattern_match", (None, None))[1] is not None:
-            message = await self._fetch_data(int(event.pattern_match[1]))
+    async def _select_backend(self, event, match_id=0, default_backend=None):
+        if default_backend is None:
+            default_backend = self.backend
+        if getattr(event, "pattern_match", (None, None))[match_id + 1] is not None:
+            message = await self._fetch_data(int(event.pattern_match[match_id + 1]))
             return pickle.loads(await message.download_media(bytes))
-        if getattr(event, "is_reply", None):
+        if getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
                 if event.from_id in self.sudo_users:
                     return pickle.loads(await reply.download_media(bytes))
                 else:
                     await event.reply(await tr(message, "untrusted_forbidden"))
-        return self.backend
+            try:
+                return int(re.search(r" #data(\d+) ", reply.text)[1])
+            except (ValueError, TypeError):
+                await event.reply(await tr(event, "invalid_id"))
+                return default_backend
+        return default_backend
 
     async def _fetch_data(self, data_id):
         ret = await self.client.get_messages(self.data_group, ids=data_id)
@@ -312,3 +354,6 @@ class BioBot:
         data.seek(0)
         message = await self.client.send_message(self.data_group, file=data)
         return "#data{}".format(message.id)
+
+def _format_user(user):
+    return "<a href=\"tg://user?id={}\">".format(user.uid) + str(user.uid) + "</a>:" + str(user.username)

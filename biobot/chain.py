@@ -79,10 +79,11 @@ class User:
         else:
             return f"(recursive loop to {self.username})"
 
-    def __repr__(self):
+    def __str__(self):
         return self._repr([])
 
-    __str__ = __repr__
+    def __repr__(self):
+        return "User(username=" + repr(self.username) + ", uid=" + repr(self.uid) + ")"
 
 
 def make_forest(data):

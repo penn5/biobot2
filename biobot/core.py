@@ -14,7 +14,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from . import chain
+from . import chain, diff
 import asyncio
 
 
@@ -32,3 +32,10 @@ async def get_chain(target, backend):
 
 async def get_chains(backend):
     return chain.make_all_chains(await get_bios(backend))
+
+async def get_diff(old, backend):
+    if not isinstance(old, chain.Forest):
+        raise TypeError("old should be a Backend")
+    new_forest = chain.make_forest(await get_bios(backend))
+    print(new_forest, old)
+    return new_forest, diff.diff_forests(old, new_forest)

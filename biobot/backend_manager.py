@@ -37,7 +37,9 @@ class Backends:
             backend = getattr(backends, module)
             self.backends += backend.get_instances(common_config, config)
         self.round_robin = {k: self.backends.copy() for k in self.operations}
-        await asyncio.gather(*[backend.init() for backend in self.backends])
+        # Initialise synchronously to make authentication easier
+        for backend in self.backends:
+            await backend.init()
 
     async def __aenter__(self):
         await self.init()

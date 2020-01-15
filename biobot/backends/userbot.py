@@ -28,7 +28,7 @@ class UserbotBackend(backends.Backend):
         self.phone = phone
         self.group_id = group_id
         self.auth_key = auth_key
-        session = telethon.sessions.MemorySession() if auth_key is None else telethon.sessions.StringSession(auth_key)
+        session = telethon.sessions.MemorySession() if not auth_key else telethon.sessions.StringSession(auth_key)
         self.client = telethon.TelegramClient(session, api_id, api_hash)
         self.waiting_until = [0, 0]
 
@@ -38,8 +38,14 @@ class UserbotBackend(backends.Backend):
             yield cls(**common_config, **config)
 
     async def init(self):
-        await self.client.start(self.phone)
-        if self.auth_key is None:
+        if not self.auth_key:
+            print(f"Signing in for {self.phone}")
+        try:
+            await self.client.start(self.phone)
+        except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
+            print(f"Unable to sign in to {self.phone}")
+            raise
+        if not self.auth_key:
             self.auth_key = telethon.sessions.StringSession.save(self.client.session)
             print(f"Please put '{self.auth_key}' as the auth_key for {self.phone} in the config.json")
         async for dialog in self.client.iter_dialogs():
