@@ -17,6 +17,7 @@
 import functools
 import telethon
 import io
+import re
 import pickle
 from telethon.tl.custom.button import Button
 from . import core
@@ -121,7 +122,7 @@ class BioBot:
         new = await event.reply(await tr(event, "please_wait"))
         forest, chain = await core.get_chain(self.target, await self._select_backend(event))
         data = await self._store_data(forest)
-        await new.edit((await tr(event, "chain_format")).format(len(chain), data,
+        await send(new, (await tr(event, "chain_format")).format(len(chain), data,
                                                                 (await tr(event, "chain_delim")).join(user.username
                                                                                                       for user in
                                                                                                       chain)))
@@ -133,7 +134,7 @@ class BioBot:
         forest, chains = await core.get_chains(await self._select_backend(event))
         data = await self._store_data(forest)
         out = [" ⇒ ".join(user.username for user in chain) for chain in chains]
-        await new.edit(data + " " + "\n\n".join(out))
+        await send(new, data + " " + "\n\n".join(out))
 
     @error_handler
     @protected
@@ -148,7 +149,6 @@ class BioBot:
         if not backend:
             await event.reply(await tr(event, "invalid_id"))
             return
-#        print(backend, await self._select_backend(event)
         forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
         data = await self._store_data(forest)
         print(data, diff)
@@ -170,7 +170,7 @@ class BioBot:
                                            for parent1, parent2, user in gone_bios)
 
         await event.reply((await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
-                                                                  username_changes, new_bios, gone_bios))
+                                                                  username_changes, new_bios, gone_bios), silent=True)
 
     async def start_command(self, event):
         if not event.is_private:
@@ -357,3 +357,10 @@ class BioBot:
 
 def _format_user(user):
     return "<a href=\"tg://user?id={}\">".format(user.uid) + str(user.uid) + "</a>:" + str(user.username)
+
+async def send(message, text):
+    await message.edit(text[:4096])
+    text = text[4096:]
+    while text:
+        await message.reply(text[:4096])
+        text = text[4096:]
