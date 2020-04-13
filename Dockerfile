@@ -5,7 +5,7 @@ COPY . .
 
 RUN apk add --update --no-cache --virtual .build-deps \
         g++ \
-        python-dev \
+        python3-dev \
         libxml2 \
         libxml2-dev \
         git && \
