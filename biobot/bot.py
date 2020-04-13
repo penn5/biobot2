@@ -313,7 +313,7 @@ class BioBot:
     async def _select_backend(self, event, match_id=0, default_backend=None):
         if default_backend is None:
             default_backend = self.backend
-        if getattr(event, "pattern_match", (None, None))[match_id + 1] is not None:
+        if getattr(event, "pattern_match", (None, None))[match_id + 1]:
             message = await self._fetch_data(int(event.pattern_match[match_id + 1]))
             return pickle.loads(await message.download_media(bytes))
         if getattr(event, "is_reply", False) and not match_id:
