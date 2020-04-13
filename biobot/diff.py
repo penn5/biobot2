@@ -14,6 +14,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+
 def diff_forests(forest1, forest2):
     username_changes = []  # Same uid, different username
     username_replacements = []  # This should really be `uid_changes`. Same username, different uid
@@ -69,8 +70,8 @@ def diff_forests(forest1, forest2):
         node1 = usernames1.get(username, None)
         node2 = usernames2.get(username, None)
         if (node1 and node2 and node1.uid != node2.uid
-              and username not in username_mapping.values() and username not in new_uids_usernames
-              and username not in username_mapping.keys() and username not in gone_uids_usernames):
+                and username not in username_mapping.values() and username not in new_uids_usernames
+                and username not in username_mapping.keys() and username not in gone_uids_usernames):
             username_replacements.append((node1, node2))
             try:
                 new_uids.remove(node2)

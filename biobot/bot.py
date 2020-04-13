@@ -114,23 +114,23 @@ class BioBot:
 
     @error_handler
     async def ping_command(self, event):
-        await event.reply(await tr(event, "pong"))
+        await event.reply(await tr(event, "pong"), silent=True)
 
     @error_handler
     @protected
     async def chain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
+        new = await event.reply(await tr(event, "please_wait"), silent=True)
         forest, chain = await core.get_chain(self.target, await self._select_backend(event))
         data = await self._store_data(forest)
         await send(new, (await tr(event, "chain_format")).format(len(chain), data,
-                                                                (await tr(event, "chain_delim")).join(user.username
-                                                                                                      for user in
-                                                                                                      chain)))
+                                                                 (await tr(event, "chain_delim")).join(user.username
+                                                                                                       for user in
+                                                                                                       chain)))
 
     @error_handler
     @protected
     async def allchains_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
+        new = await event.reply(await tr(event, "please_wait"), silent=True)
         forest, chains = await core.get_chains(await self._select_backend(event))
         data = await self._store_data(forest)
         out = [" ⇒ ".join(user.username for user in chain) for chain in chains]
@@ -139,15 +139,16 @@ class BioBot:
     @error_handler
     @protected
     async def fetchdata_command(self, event):
-        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
+        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"),
+                          silent=True)
 
     @error_handler
     @protected
     async def diff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
+        new = await event.reply(await tr(event, "please_wait"), silent=True)
         backend = await self._select_backend(event, default_backend=False)
         if not backend:
-            await event.reply(await tr(event, "invalid_id"))
+            await event.reply(await tr(event, "invalid_id"), silent=True)
             return
         forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
         data = await self._store_data(forest)
@@ -160,17 +161,17 @@ class BioBot:
         username_replacements = delim.join(_format_user(user1) + username_delim + _format_user(user2)
                                            for user1, user2 in username_replacements)
         username_changes = delim.join(_format_user(user1) + username_delim + _format_user(user2)
-                                           for user1, user2 in username_changes)
+                                      for user1, user2 in username_changes)
         parent_delim = await tr(event, "diff_parents_delim")
         new_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
-                                           + username_delim + user
-                                           for parent1, parent2, user in new_bios)
+                              + username_delim + user
+                              for parent1, parent2, user in new_bios)
         gone_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
-                                           + username_delim + user
-                                           for parent1, parent2, user in gone_bios)
+                               + username_delim + user
+                               for parent1, parent2, user in gone_bios)
 
-        await event.reply((await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
-                                                                  username_changes, new_bios, gone_bios), silent=True)
+        await send(new, (await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
+                                                                username_changes, new_bios, gone_bios))
 
     async def start_command(self, event):
         if not event.is_private:
@@ -322,11 +323,11 @@ class BioBot:
                 if event.from_id in self.sudo_users:
                     return pickle.loads(await reply.download_media(bytes))
                 else:
-                    await event.reply(await tr(message, "untrusted_forbidden"))
+                    await event.reply(await tr(message, "untrusted_forbidden"), silent=True)
             try:
                 return int(re.search(r" #data(\d+) ", reply.text)[1])
             except (ValueError, TypeError):
-                await event.reply(await tr(event, "invalid_id"))
+                await event.reply(await tr(event, "invalid_id"), silent=True)
                 return default_backend
         return default_backend
 
@@ -355,12 +356,14 @@ class BioBot:
         message = await self.client.send_message(self.data_group, file=data)
         return "#data{}".format(message.id)
 
+
 def _format_user(user):
     return "<a href=\"tg://user?id={}\">".format(user.uid) + str(user.uid) + "</a>:" + str(user.username)
+
 
 async def send(message, text):
     await message.edit(text[:4096])
     text = text[4096:]
     while text:
-        await message.reply(text[:4096])
+        await message.reply(text[:4096], silent=True)
         text = text[4096:]

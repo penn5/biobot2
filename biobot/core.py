@@ -33,6 +33,7 @@ async def get_chain(target, backend):
 async def get_chains(backend):
     return chain.make_all_chains(await get_bios(backend))
 
+
 async def get_diff(old, backend):
     if not isinstance(old, chain.Forest):
         raise TypeError("old should be a Backend")
