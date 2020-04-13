@@ -142,7 +142,7 @@ def _iter_parents(leaf, current_stack=[], ignore=[]):
     new_stack = [leaf] + current_stack
     yielded = False
     for parent in leaf.parents:
-        if parent not in current_stack:
+        if parent not in new_stack:
             for ret in _iter_parents(parent, new_stack):
                 yield ret
                 yielded = True
@@ -157,7 +157,7 @@ def _iter_children(leaf, current_stack=[], ignore=[]):
     new_stack = current_stack + [leaf]
     yielded = False
     for child in leaf.children:
-        if child not in current_stack:
+        if child not in new_stack:
             for ret in _iter_children(child, new_stack, ignore):
                 yield ret
                 yielded = True
