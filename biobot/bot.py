@@ -94,6 +94,9 @@ class BioBot:
         self.client.add_event_handler(self.diff_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/diff"
                                                                  + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
+        self.client.add_event_handler(self.link_command,
+                                      telethon.events.NewMessage(incoming=True, pattern="/(?:perma)?link"
+                                                                 + eoc_regex + "(?:#data)?(\d*) ([a-zA-z0-9_]{5,})"))
         self.client.add_event_handler(self.start_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/start\s?(.*)"))
         self.client.add_event_handler(self.user_joined_admission,
@@ -148,7 +151,7 @@ class BioBot:
         new = await event.reply(await tr(event, "please_wait"), silent=True)
         backend = await self._select_backend(event, default_backend=False)
         if not backend:
-            await event.reply(await tr(event, "invalid_id"), silent=True)
+            await send(new, await tr(event, "invalid_id"))
             return
         forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
         data = await self._store_data(forest)
@@ -173,6 +176,17 @@ class BioBot:
         await send(new, (await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
                                                                 username_changes, new_bios, gone_bios))
 
+    @error_handler
+    @protected
+    async def link_command(self, event):
+        new = await event.reply(await tr(event, "please_wait"), silent=True)
+        data = await self._select_backend(event, default_backend=False)
+        if not data:
+            await send(new, await tr(event, "invalid_id"))
+            return
+        ret = data.get_node(event.pattern_match[2], add=False)
+        await send(new, "<a href=\"tg://user?id={}\">".format(ret.uid) + ret.username + "</a>")
+
     async def start_command(self, event):
         if not event.is_private:
             return
@@ -189,7 +203,7 @@ class BioBot:
                     await event.respond((await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
                     return
                 if msg[4] == "j":
-                    await event.respond(await tr(event, "join_help"), buttons=buttons)
+                    await event.respond(await tr(event, "join_help").format(msg[5:]), buttons=buttons)
                     return
                 if msg[4] == "u":
                     await event.respond(await tr(event, "username_help"), buttons=buttons)

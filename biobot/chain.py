@@ -30,7 +30,7 @@ class Forest:
     def get_nodes(self):
         return self._instances.values()
 
-    def get_node(self, username, uid=None):
+    def get_node(self, username, uid=None, add=True):
         try:
             ret = self._instances[username.lower()]
             assert uid is None or ret.uid == uid or ret.uid is None
@@ -38,6 +38,8 @@ class Forest:
                 ret.uid = uid
             return ret
         except KeyError:
+            if not add:
+                raise
             self._instances[username.lower()] = ret = User(self, username)
             ret.uid = uid
             return ret
