@@ -203,7 +203,7 @@ class BioBot:
                     await event.respond((await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
                     return
                 if msg[4] == "j":
-                    await event.respond(await tr(event, "join_help").format(msg[5:]), buttons=buttons)
+                    await event.respond((await tr(event, "join_help")).format(msg[5:]), buttons=buttons)
                     return
                 if msg[4] == "u":
                     await event.respond(await tr(event, "username_help"), buttons=buttons)
