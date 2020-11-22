@@ -20,14 +20,14 @@ import json
 from . import bot, backend_manager
 
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():
     config = json.load(open("config.json"))
     frontend = bot.BioBot(main_group=config["common"]["group_id"], **config["frontend"])
-    await frontend.init()
-    async with backend_manager.Backends(config) as backend:
+    client = await frontend.init()
+    async with backend_manager.Backends(config, client) as backend:
         await frontend.run(backend)
     assert False
 

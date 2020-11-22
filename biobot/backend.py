@@ -40,4 +40,6 @@ class Backend:
 
 
 class Unavailable(RuntimeError):
-    pass
+    def __init__(self, message, seconds=0):
+        super().__init__(message)
+        self.seconds = seconds

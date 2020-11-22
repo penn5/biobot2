@@ -22,7 +22,7 @@ with open("translations.json") as file:
 
 
 async def translate(message, key):
-    sender = getattr(message, "get_sender", getattr(message, "get_user", None))
+    sender = getattr(message, "get_sender", getattr(message, "get_user", lambda: None))
     ret = translations.get((await sender()).lang_code, {}).get(key, None)
     if ret is None:
         ret = translations["en"].get(key, "missing translation for {}".format(key))

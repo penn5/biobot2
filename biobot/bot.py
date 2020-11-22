@@ -23,6 +23,7 @@ from telethon.tl.custom.button import Button
 from . import core
 from .translations import tr
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ def protected(func):
         if event.chat_id != self.main_group and \
                 event.chat_id != self.bot_group and \
                 event.chat_id not in self.extra_groups and \
-                event.from_id not in self.sudo_users:
+                event.from_id.user_id not in self.sudo_users:
             await event.reply(await tr(event, "forbidden"))
         else:
             return await func(self, event)
@@ -76,7 +77,7 @@ class BioBot:
 
     async def init(self):
         await self.client.start(bot_token=self.bot_token)
-        await self.client.get_participants(self.main_group, aggressive=True)
+        await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username
         eoc_regex = f"(?:$|\s|@{me.username}(?:$|\s))"
@@ -108,6 +109,7 @@ class BioBot:
         self.admissions_entity = await self.client.get_entity(self.admissions_group)
         self.target = self.admissions_entity.username
         self.data_group = await self.client.get_input_entity(self.data_group)
+        return self.client
 
     async def run(self, backend):
         self.backend = backend
@@ -241,14 +243,15 @@ class BioBot:
         elif event.data[0] == b"c"[0]:
             await self.callback_query_cancel(event, message)
         else:
-            logger.error("Unknown callback query state %r", event.data[0])
+            logger.error("Unknown callback query state %r", event)
 
     async def callback_query_start(self, event, message):
         try:
             await message.edit(await tr(event, "please_click"),
-                               buttons=[[Button.inline(await tr(event, "rules_accept"), b"j" + event.data[1:])],
-                                        [Button.inline(await tr(event, "rules_reject"), b"c" + event.data[1:])],
-                                        [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:] + b"s")]])
+                               buttons=[[Button.url(await tr(event, "rules_link"), "https://t.me/" + self.rules_username)],
+                                        [Button.inline(await tr(event, "rules_accept"), b"j" + event.data[1:5])],
+                                        [Button.inline(await tr(event, "rules_reject"), b"c" + event.data[1:5])],
+                                        [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:5] + b"s")]])
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             await event.answer(await tr(event, "button_loading"))
             return
@@ -267,7 +270,7 @@ class BioBot:
             await event.answer(await tr(event, "already_in_chain"), alert=True)
             await message.edit(await tr(event, "already_in_chain"), buttons=None)
             return
-        await self.callback_query_done(event, message, b"d" + event.data[1:] + chain[0].username.encode("ascii"))
+        await self.callback_query_done(event, message, b"d" + event.data[1:5] + int(time.time()).to_bytes(4, "big") + chain[0].username.encode("ascii"))
 
     async def callback_query_done(self, event, message, data=None):
         if data is None:
@@ -276,6 +279,10 @@ class BioBot:
         else:
             skip = True
         if not skip:
+            print(int.from_bytes(data[5:9], "big"), int(time.time()) - 120)
+            if int.from_bytes(data[5:9], "big") < int(time.time()) - 120:
+                await self.callback_query_join(event, message)
+                return
             try:
                 await message.edit(await tr(event, "verifying_10s"), buttons=None)
             except telethon.errors.rpcerrorlist.MessageNotModifiedError:
@@ -283,15 +290,14 @@ class BioBot:
                 return
             input_entity = await event.get_input_sender()
             entity = await self.client.get_entity(input_entity)  # To prevent caching
-        if not skip:
             bio = [username.lower() for username in await self.backend.get_bio_links(entity.id, entity.username)]
-        if skip or data[5:].decode("ascii").lower() not in bio:
+        if skip or data[9:].decode("ascii").lower() not in bio:
             await message.edit(await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), data)],
-                                        [Button.inline(await tr(event, "cancel"), b"c" + data[1:])],
+                                        [Button.inline(await tr(event, "cancel"), b"c" + data[1:5])],
                                         [Button.inline(await tr(event, "get_help"),
-                                                       b"h" + data[1:5] + b"j" + data[5:])]])
-            msg = (await tr(event, "set_bio")).format(data[5:].decode("ascii"))
+                                                       b"h" + data[1:5] + b"j" + data[9:])]])
+            msg = (await tr(event, "set_bio")).format(data[9:].decode("ascii"))
             try:
                 await event.answer(msg, alert=True)
             except telethon.errors.rpcerrorlist.QueryIdInvalidError:
@@ -299,23 +305,23 @@ class BioBot:
             return
         if not skip and entity.username is None:
             try:
-                await event.answer("Please set a username on Telegram and select a button", alert=True)
+                await event.answer(await tr(message, "set_username"), alert=True)
             except telethon.errors.rpcerrorlist.QueryIdInvalidError:
                 pass
             await message.edit(await tr(message, "please_click"),
                                buttons=[[Button.inline(await tr(message, "continue"), data)],
                                         [Button.inline(await tr(message, "cancel"), b"c" + data[1:5])],
                                         [Button.inline(await tr(message, "get_help"),
-                                                       b"h" + data[1:5] + b"u" + data[5:])]])
+                                                       b"h" + data[1:5] + b"u" + data[5:9])]])
             return
         invite = await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(self.main_group))
         escaped = invite.link.split("/")[-1]
         await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
         await message.edit(await tr(message, "please_click"),
                            buttons=[[Button.inline(await tr(message, "continue"), data)],
-                                    [Button.inline(await tr(message, "cancel"), b"c" + data[1:])],
+                                    [Button.inline(await tr(message, "cancel"), b"c" + data[1:5])],
                                     [Button.inline(await tr(message, "get_help"),
-                                                   b"h" + data[1:5] + b"j" + data[5:])]])
+                                                   b"h" + data[1:5] + b"j" + data[9:])]])
 
     async def callback_query_help(self, event, message):
         await event.answer(url="t.me/{}?start=help{}{:08X}{}".format(self.username, event.data[5:6].decode("ascii"),
@@ -325,24 +331,33 @@ class BioBot:
         await event.answer(await tr(message, "cancelled"), alert=True)
         await message.delete()
 
-    async def _select_backend(self, event, match_id=0, default_backend=None):
+    async def _select_backend(self, event, match_id=0, default_backend=None, no_error=False):
         if default_backend is None:
             default_backend = self.backend
-        if getattr(event, "pattern_match", (None, None))[match_id + 1]:
-            message = await self._fetch_data(int(event.pattern_match[match_id + 1]))
+        try:
+            match = getattr(event, "pattern_match", ())[match_id + 1]
+        except IndexError:
+            match = None
+        if match:
+            message = await self._fetch_data(int(match))
             return pickle.loads(await message.download_media(bytes))
         if getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
+            print(reply)
             if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
-                if event.from_id in self.sudo_users:
+                if event.from_id.user_id in self.sudo_users:
                     return pickle.loads(await reply.download_media(bytes))
                 else:
                     await event.reply(await tr(message, "untrusted_forbidden"), silent=True)
             try:
-                return int(re.search(r" #data(\d+) ", reply.text)[1])
+                data_id = int(re.search(r"\s#data(\d+)\s", reply.text)[1])
             except (ValueError, TypeError):
-                await event.reply(await tr(event, "invalid_id"), silent=True)
+                if not no_error:
+                    await event.reply(await tr(event, "invalid_id"), silent=True)
                 return default_backend
+            else:
+                msg = await self.client.get_messages(self.data_group, ids=data_id)
+                return pickle.loads(await msg.download_media(bytes))
         return default_backend
 
     async def _fetch_data(self, data_id):

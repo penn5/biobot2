@@ -30,10 +30,9 @@ class UserbotBackend(backends.Backend):
         self.auth_key = auth_key
         session = telethon.sessions.MemorySession() if not auth_key else telethon.sessions.StringSession(auth_key)
         self.client = telethon.TelegramClient(session, api_id, api_hash)
-        self.waiting_until = [0, 0]
 
     @classmethod
-    def get_instances(cls, common_config, configs):
+    def get_instances(cls, bot, common_config, configs):
         for config in configs:
             yield cls(**common_config, **config)
 
@@ -56,25 +55,19 @@ class UserbotBackend(backends.Backend):
         self.client.flood_sleep_threshold = 0
 
     async def get_joined_users(self):
-        if time.time() < self.waiting_until[0]:
-            raise backends.Unavailable(f"Was flood-waited for {self.waiting_until[0] - time.time()}")
         ret = []
         try:
-            async for user in self.client.iter_participants(self.group, aggressive=True):
+            async for user in self.client.iter_participants(self.group):
                 ret.append((user.id, user.username))
-        except telethon.errors.FloodWaitError as fwe:
-            self.waiting_until[1] = time.time() + fwe.seconds
-            raise backends.Unavailable(f"Flood-waited for {fwe.seconds}")
+        except telethon.errors.rpcerrorlist.FloodWaitError as e:
+            raise backends.Unavailable("Flood Wait", e.seconds)
         return ret
 
     async def get_bio_links(self, uid, username):
-        if time.time() < self.waiting_until[1]:
-            raise backends.Unavailable(f"Was flood-waited for {self.waiting_until[1] - time.time()}")
         try:
             full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
-        except telethon.errors.FloodWaitError as fwe:
-            self.waiting_until[1] = time.time() + fwe.seconds
-            raise backends.Unavailable(f"Flood-waited for {fwe.seconds}")
+        except telethon.errors.rpcerrorlist.FloodWaitError as e:
+            raise backends.Unavailable("Flood Wait", e.seconds)
         except ValueError:
             await self.get_joined_users()
             return await self.get_bio_links(uid, username)

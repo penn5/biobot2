@@ -14,9 +14,23 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from ..backend import Backend, Unavailable
-from .userbot import UserbotBackend
-from .scraper import ScraperBackend
-from .bot import BotBackend
+from .. import backends
+from . import userbot
 
-__all__ = ["Backend", "Unavailable", "UserbotBackend", "ScraperBackend", "BotBackend"]
+
+class BotBackend(userbot.UserbotBackend):
+    def __init__(self, bot, group_id, api_id, api_hash):
+        self.token = bot if isinstance(bot, str) else None
+        self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash) if isinstance(bot, str) else bot
+        self.group = group_id
+
+    @classmethod
+    def get_instances(cls, bot, common_config, configs):
+        for config in configs:
+            this_bot = config.pop("bot") or bot
+            return [cls(this_bot, **config, **common_config)]
+
+    async def init(self):
+        if self.token:
+            self.bot.start(bot_token=self.token)
+        self.client.flood_sleep_threshold = 0
