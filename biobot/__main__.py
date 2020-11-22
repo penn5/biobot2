@@ -20,7 +20,7 @@ import json
 from . import bot, backend_manager
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
 
 async def main():
