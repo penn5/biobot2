@@ -38,5 +38,4 @@ async def get_diff(old, backend):
     if not isinstance(old, chain.Forest):
         raise TypeError("old should be a Backend")
     new_forest = chain.make_forest(await get_bios(backend))
-    print(new_forest, old)
     return new_forest, diff.diff_forests(old, new_forest)

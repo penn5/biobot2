@@ -157,7 +157,6 @@ class BioBot:
             return
         forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
         data = await self._store_data(forest)
-        print(data, diff)
         new_uids, gone_uids, username_replacements, username_changes, new_bios, gone_bios = diff
         delim = await tr(event, "diff_delim")
         new_uids = delim.join(_format_user(user) for user in new_uids)
@@ -205,7 +204,7 @@ class BioBot:
                     await event.respond((await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
                     return
                 if msg[4] == "j":
-                    await event.respond((await tr(event, "join_help")).format(msg[5:]), buttons=buttons)
+                    await event.respond((await tr(event, "join_help")).format(msg[13:]), buttons=buttons)
                     return
                 if msg[4] == "u":
                     await event.respond(await tr(event, "username_help"), buttons=buttons)
@@ -279,7 +278,6 @@ class BioBot:
         else:
             skip = True
         if not skip:
-            print(int.from_bytes(data[5:9], "big"), int(time.time()) - 120)
             if int.from_bytes(data[5:9], "big") < int(time.time()) - 120:
                 await self.callback_query_join(event, message)
                 return
@@ -312,7 +310,7 @@ class BioBot:
                                buttons=[[Button.inline(await tr(message, "continue"), data)],
                                         [Button.inline(await tr(message, "cancel"), b"c" + data[1:5])],
                                         [Button.inline(await tr(message, "get_help"),
-                                                       b"h" + data[1:5] + b"u" + data[5:9])]])
+                                                       b"h" + data[1:5] + b"u")]])
             return
         invite = await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(self.main_group))
         escaped = invite.link.split("/")[-1]
@@ -343,7 +341,6 @@ class BioBot:
             return pickle.loads(await message.download_media(bytes))
         if getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
-            print(reply)
             if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
                 if event.from_id.user_id in self.sudo_users:
                     return pickle.loads(await reply.download_media(bytes))

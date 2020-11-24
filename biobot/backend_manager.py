@@ -83,7 +83,6 @@ class Backends:
 
     async def _act(self, operation, backend):
         op = self._operations[operation](backend)
-        print(op)
         while True:
             args, kwargs, fut = await self._get_queue(operation)
             try:
