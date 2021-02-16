@@ -44,6 +44,12 @@ class Forest:
             ret.uid = uid
             return ret
 
+    def get_dict(self):
+        ret = {}
+        for node in self.get_nodes():
+            ret[(node.uid, node.username)] = [child.username for child in node.children]
+        return ret
+
     def __getstate__(self):
         return {k: (v.username, v.uid, [child.username for child in v.children], v.extras)
                 for k, v in self._instances.items()}
@@ -166,3 +172,4 @@ def _iter_children(leaf, current_stack=[], ignore=[]):
     if not yielded:
         # It's the end of the path. Begin leaf yields
         yield new_stack
+

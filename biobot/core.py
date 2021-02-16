@@ -36,6 +36,14 @@ async def get_chains(backend):
 
 async def get_diff(old, backend):
     if not isinstance(old, chain.Forest):
-        raise TypeError("old should be a Backend")
+        raise TypeError("old should be a Forest")
     new_forest = chain.make_forest(await get_bios(backend))
     return new_forest, diff.diff_forests(old, new_forest)
+
+
+async def get_gdiff(old, backend):
+    from . import gdiff
+    if not isinstance(old, chain.Forest):
+        raise TypeError("old should be a Forest")
+    new_forest = chain.make_forest(await get_bios(backend))
+    return new_forest, gdiff.draw_chain_diff(old.get_dict(), new_forest.get_dict())

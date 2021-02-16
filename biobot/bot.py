@@ -95,6 +95,9 @@ class BioBot:
         self.client.add_event_handler(self.diff_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/diff"
                                                                  + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
+        self.client.add_event_handler(self.gdiff_command,
+                                      telethon.events.NewMessage(incoming=True, pattern="/gdiff"
+                                                                 + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
         self.client.add_event_handler(self.link_command,
                                       telethon.events.NewMessage(incoming=True, pattern="/(?:perma)?link"
                                                                  + eoc_regex + "(?:#data)?(\d*) ([a-zA-z0-9_]{5,})"))
@@ -125,7 +128,7 @@ class BioBot:
     @protected
     async def chain_command(self, event):
         new = await event.reply(await tr(event, "please_wait"), silent=True)
-        forest, chain = await core.get_chain(self.target, await self._select_backend(event))
+        forest, chain = await core.get_chain(self.target, await self._select_backend(event, error=new))
         data = await self._store_data(forest)
         await send(new, (await tr(event, "chain_format")).format(len(chain), data,
                                                                  (await tr(event, "chain_delim")).join(user.username
@@ -136,7 +139,7 @@ class BioBot:
     @protected
     async def allchains_command(self, event):
         new = await event.reply(await tr(event, "please_wait"), silent=True)
-        forest, chains = await core.get_chains(await self._select_backend(event))
+        forest, chains = await core.get_chains(await self._select_backend(event, error=new))
         data = await self._store_data(forest)
         out = [" ⇒ ".join(user.username for user in chain) for chain in chains]
         await send(new, data + " " + "\n\n".join(out))
@@ -151,11 +154,10 @@ class BioBot:
     @protected
     async def diff_command(self, event):
         new = await event.reply(await tr(event, "please_wait"), silent=True)
-        backend = await self._select_backend(event, default_backend=False)
+        backend = await self._select_backend(event, default_backend=False, error=new)
         if not backend:
-            await send(new, await tr(event, "invalid_id"))
             return
-        forest, diff = await core.get_diff(backend, await self._select_backend(event, 1))
+        forest, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=new))
         data = await self._store_data(forest)
         new_uids, gone_uids, username_replacements, username_changes, new_bios, gone_bios = diff
         delim = await tr(event, "diff_delim")
@@ -179,9 +181,20 @@ class BioBot:
 
     @error_handler
     @protected
+    async def gdiff_command(self, event):
+        new = await event.reply(await tr(event, "please_wait"), silent=True)
+        backend = await self._select_backend(event, default_backend=False, error=new)
+        if not backend:
+            return
+        forest, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new))
+        await self._store_data(forest)
+        await event.reply(file=diff, force_document=True)
+
+    @error_handler
+    @protected
     async def link_command(self, event):
         new = await event.reply(await tr(event, "please_wait"), silent=True)
-        data = await self._select_backend(event, default_backend=False)
+        data = await self._select_backend(event, default_backend=False, error=new)
         if not data:
             await send(new, await tr(event, "invalid_id"))
             return
@@ -329,33 +342,40 @@ class BioBot:
         await event.answer(await tr(message, "cancelled"), alert=True)
         await message.delete()
 
-    async def _select_backend(self, event, match_id=0, default_backend=None, no_error=False):
+    async def _select_backend(self, event, match_id=0, *, error=None, default_backend=None):
+        if error is None:
+            error = event
         if default_backend is None:
             default_backend = self.backend
+            data_id = None
         try:
-            match = getattr(event, "pattern_match", ())[match_id + 1]
+            data_id = getattr(event, "pattern_match", ())[match_id + 1]
+            if data_id:
+                data_id = int(data_id)
+        except ValueError:
+            await send(error, await tr(event, "invalid_id"))
         except IndexError:
-            match = None
-        if match:
-            message = await self._fetch_data(int(match))
-            return pickle.loads(await message.download_media(bytes))
+            pass
         if getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
                 if event.from_id.user_id in self.sudo_users:
                     return pickle.loads(await reply.download_media(bytes))
                 else:
-                    await event.reply(await tr(message, "untrusted_forbidden"), silent=True)
-            try:
-                data_id = int(re.search(r"\s#data(\d+)\s", reply.text)[1])
-            except (ValueError, TypeError):
-                if not no_error:
-                    await event.reply(await tr(event, "invalid_id"), silent=True)
-                return default_backend
-            else:
-                msg = await self.client.get_messages(self.data_group, ids=data_id)
-                return pickle.loads(await msg.download_media(bytes))
-        return default_backend
+                    await send(error, await tr(message, "untrusted_forbidden"))
+                    return
+            if data_id is None:
+                try:
+                    data_id = int(re.search(r"\s#data(\d+)\s", reply.text)[1])
+                except (ValueError, TypeError):
+                    pass
+        if data_id is None:
+            return default_backend
+        data = await self._fetch_data(data_id)
+        if data is None:
+            await send(error, await tr(event, "invalid_id"))
+            return default_backend
+        return pickle.loads(await data.download_media(bytes))
 
     async def _fetch_data(self, data_id):
         ret = await self.client.get_messages(self.data_group, ids=data_id)
@@ -387,8 +407,14 @@ def _format_user(user):
     return "<a href=\"tg://user?id={}\">".format(user.uid) + str(user.uid) + "</a>:" + str(user.username)
 
 
-async def send(message, text):
-    await message.edit(text[:4096])
+async def send(message, text, **kwargs):
+    if message.out:
+        try:
+            await message.edit(text[:4096], **kwargs)
+        except telethon.errors.rpcerrorlist.MessageNotModifiedError:
+            pass
+    else:
+        message = await message.reply(text[:4096], silent=True, **kwargs)
     text = text[4096:]
     while text:
         await message.reply(text[:4096], silent=True)
