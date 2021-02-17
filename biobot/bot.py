@@ -189,6 +189,7 @@ class BioBot:
         forest, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new))
         await self._store_data(forest)
         await event.reply(file=diff, force_document=True)
+        await new.delete()
 
     @error_handler
     @protected
@@ -349,9 +350,9 @@ class BioBot:
             default_backend = self.backend
             data_id = None
         try:
-            data_id = getattr(event, "pattern_match", ())[match_id + 1]
-            if data_id:
-                data_id = int(data_id)
+            data_id_str = getattr(event, "pattern_match", ())[match_id + 1]
+            if data_id_str:
+                data_id = int(data_id_str)
         except ValueError:
             await send(error, await tr(event, "invalid_id"))
         except IndexError:
@@ -378,6 +379,7 @@ class BioBot:
         return pickle.loads(await data.download_media(bytes))
 
     async def _fetch_data(self, data_id):
+        print(data_id)
         ret = await self.client.get_messages(self.data_group, ids=data_id)
         if getattr(getattr(ret, "file", None), "name", None) != "raw_chain.forest":
             return None

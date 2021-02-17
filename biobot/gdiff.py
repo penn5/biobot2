@@ -29,40 +29,38 @@ def draw_chain_diff(old_data, new_data):
     username_edges = set()
     edges = collections.defaultdict(dict)
     for src, dest in common_edges:
-        edges[src][dest] = {"type": "common", "weight": 2}
+        edges[src][dest] = {"type": "common", "weight": 0.5}
     for src, dest in old_only_edges:
-        edges[src][dest] = {"type": "old", "weight": 1}
+        edges[src][dest] = {"type": "old", "weight": 0.5}
     for src, dest in new_only_edges:
-        edges[src][dest] = {"type": "new", "weight": 1}
+        edges[src][dest] = {"type": "new", "weight": 0.5}
     for uid in duplicate_uids:
         old_name = old_names[old_uid_to_username[uid]]
         new_name = new_names[new_uid_to_username[uid]]
         uid_edges.add((old_name, new_name))
         uid_edges.add((new_name, old_name))
     for src, dest in uid_edges:
-        edges[src][dest] = {"type": "uid", "weight": 5}
+        edges[src][dest] = {"type": "uid", "weight": 1}
     for username in duplicate_usernames:
         old_name = old_names[username]
         new_name = new_names[username]
         username_edges.add((old_name, new_name))
         username_edges.add((new_name, old_name))
     for src, dest in username_edges:
-        edges[src][dest] = {"type": "username", "weight": 5}
+        edges[src][dest] = {"type": "username", "weight": 1}
     graph = nx.DiGraph(edges)
-    fig = plt.figure(figsize=(100, 62))
+    fig = plt.figure(figsize=(200, 124))
     ax = plt.axes()
-    pos = nx.kamada_kawai_layout(graph)
-    counter = collections.Counter(tuple(round(n / 1000) for n in v) for v in pos.values())
-    fixed = tuple(k for k, v in pos.items() if counter[tuple(round(n / 1000) for n in v)] == 1)
-    pos = nx.spring_layout(graph, pos=pos, fixed=fixed, iterations=5, k=3)
-    pos = nx.rescale_layout_dict(pos, 10)
-    nx.draw_networkx_nodes(graph, pos, ax=ax, node_color="tab:blue", node_size=50)
-    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=common_edges, width=4, alpha=0.5, edge_color="tab:blue")
-    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=new_only_edges, width=4, alpha=0.5, edge_color="tab:green")
-    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=old_only_edges, width=4, alpha=0.5, edge_color="tab:red")
-    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=uid_edges, width=4, alpha=0.5, edge_color="tab:orange")
-    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=username_edges, width=4, alpha=0.5, edge_color="tab:pink")
-    nx.draw_networkx_labels(graph, pos, ax=ax, font_size=10)
+    pos = nx.spring_layout(graph)
+    pos = nx.kamada_kawai_layout(graph, pos=pos)
+    pos = nx.rescale_layout_dict(pos, 50)
+    nx.draw_networkx_nodes(graph, pos, ax=ax, node_color="tab:blue", node_size=20)
+    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=common_edges, width=2, alpha=0.5, edge_color="tab:blue")
+    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=new_only_edges, width=2, alpha=0.5, edge_color="tab:green")
+    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=old_only_edges, width=2, alpha=0.5, edge_color="tab:red")
+    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=uid_edges, width=2, alpha=0.5, edge_color="tab:orange")
+    nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=username_edges, width=2, alpha=0.5, edge_color="tab:pink")
+    nx.draw_networkx_labels(graph, pos, ax=ax, font_size=5)
     data = io.BytesIO()
     data.name = "chain.svg"
     fig.savefig(data, dpi=500, bbox_inches="tight", format="svg")

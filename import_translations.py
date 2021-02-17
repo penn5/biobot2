@@ -39,6 +39,8 @@ langs = api.list_project_languages(project)
 print(langs)
 data = {}
 for lang in langs:
+    if lang["code"] != "en":
+        continue
     with io.BytesIO() as out:
         api.export(project, lang["code"], "json", filters=["translated", "not_fuzzy"], local_file=out)
         out.seek(0)
