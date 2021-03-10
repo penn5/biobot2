@@ -14,7 +14,12 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import ast
+import collections
+import io
 import itertools
+import networkx
+import pickle
 
 
 """Converts the username:bio dict to a tree of users, and optionally a list"""
@@ -94,82 +99,144 @@ class User:
         return "User(username=" + repr(self.username) + ", uid=" + repr(self.uid) + ")"
 
 
-def make_forest(data):
-    if isinstance(data, Forest):
+def _destringize(data):
+    if data == "None":
+        return None
+    try:
+        return ast.literal_eval(data)
+    except SyntaxError:
+        raise ValueError from e
+
+
+def make_graph(data, users_data={}):
+    if isinstance(data, tuple):
+        data, name = data
+        if name == "raw_chain.forest":
+            data = pickle.loads(data)
+        elif name == "chain.gml":
+            data = networkx.read_gml(io.BytesIO(data), destringizer=_destringize)
+        else:
+            raise RuntimeError(f"file name {name} incorrect")
+    if isinstance(data, networkx.DiGraph):
         return data
-    forest = Forest()
+    graph = networkx.DiGraph()
+    if isinstance(data, Forest):
+        old_data = data
+        data = data.get_dict()
+    else:
+        old_data = None
+    username_to_name = {username.casefold(): username or uid for uid, username in data if username}
+    for uid, username in data:
+        graph.add_node(username or uid, username=username, uid=uid, **users_data.get((uid, username), {}))
     for (uid, username), children in data.items():
-        if username is not None:
-            node = forest.get_node(username, uid)
-            for child in children:
-                node.add_child(child)
-    return forest
+        name = username or uid
+        for child in children:
+            child_name = username_to_name.get(child.casefold(), None)
+            if child_name is None:
+                username_to_name[child] = child
+                graph.add_node(child, username=child, uid=None)
+                child_name = child
+            graph.add_edge(name, child_name)
+    if old_data:
+        for node in old_data.get_nodes():
+            name = node.username or node.uid
+            graph.nodes[name]["access_hash"] = getattr(node.extras.get("entity", None), "access_hash", None)
+            graph.nodes[name]["deleted"] = None
+    return graph
 
 
-def make_trees(data):
-    return make_forest(data).get_roots()
+def _score_node(val):
+    name, score = val
+    if isinstance(name, int):
+        return score - 1
+    return score
 
 
-def make_chains(data, target):
-    forest = make_forest(data)
-    leaf = forest.get_node(target)
-    ret = _iter_parents(leaf)
-    if __debug__:
-        ret = list(ret)
-        for chain in ret:
-            assert len(chain) == len(set(chain)), f"There are duplicate elements in the chain ({chain})"
-    return forest, ret
+def _score_chain(chain):
+    ret = len(chain)
+    if isinstance(chain[0], int) or isinstance(chain[-1], int):
+        ret -= 1
+    return ret
 
 
-def make_chain(data, target):
-    forest, chains = make_chains(data, target)
-    return forest, max(chains, key=lambda x: len(x))
+def _edge_bfs(graph, root, get_children):
+    # root is returned last
+    queue = collections.deque(((None, root),))
+    visited_nodes = set()
+    nexts = {(None, root): None}
+    in_scores = {root: 0}
+    out_scores = {root: 0}
+    while queue:
+        last_edge = queue.popleft()
+        last_node, node = last_edge
+        visited_nodes.add(node)
+        children = tuple(get_children(graph, node))
+        nexts[(node, None)] = last_edge
+        for child in children:
+            edge = (node, child)
+            duplicate_node = False
+            # quick and greedy heuristic to detect potential cycles
+            if child in visited_nodes:
+                # (slowly) verify cycle exists with latest iteration of the history (if this becomes outdated, a parent will always be added to queue and we will rerun this)
+                next = last_edge
+                duplicate_edge = False
+                while next[0]:
+                    if next == edge:
+                        # the edge appears in our history, we already did this cycle
+                        duplicate_edge = True
+                        break
+                    if next[1] == child:
+                        duplicate_node = True
+                    next = nexts[next]
+                if duplicate_edge:
+                    continue
+            if out_scores[node] + 1 > in_scores.get(child, float("-inf")):
+                queue.append(edge)
+                out_scores[child] = out_scores[node] + 1
+                if not duplicate_node:
+                    # when a node is duplicated, we want to allow longer paths that go into it to replace the root, but we still want to count the loop towards the path score
+                    in_scores[child] = out_scores[node] + 1
+                nexts[edge] = last_edge
+    best = max(out_scores.items(), key=_score_node)
+    next = best[0], None
+    ret = []
+    while next[0]:
+        ret.append(next[0])
+        next = nexts[next]
+    return ret
+
+
+def make_chain(graph, target):
+    # select longest path, preferring chains ending in a username
+    return _edge_bfs(graph, target, networkx.DiGraph.predecessors)
+
+
+def make_notinchain(graph, target):
+    chain = make_chain(graph, target)
+    return set(graph.nodes) - set(chain)
 
 
 def make_all_chains(data):
-    """Get a list of chains possible to generate from the data
-       Prefers to make longer chains than shorter ones
-       Yields lists of Users. Note that they may have incorrect .parents and .children attributes"""
-    forest = make_forest(data)
-    ignore = []
+    """
+    Get a list of chains possible to generate from the data
+    Prefers to make longer chains than shorter ones
+    """
+    cut = data.copy()
     ret = []
-    while True:
-        stacks = itertools.chain.from_iterable(_iter_children(root, ignore=ignore) for root in forest.get_roots())
-        try:
-            max_stack = max(stacks, key=lambda x: len(x))
-        except ValueError:
-            break
-        ignore.extend(max_stack)
-        ret.append(max_stack)
-    return forest, ret
-
-
-def _iter_parents(leaf, current_stack=[], ignore=[]):
-    if leaf in ignore:
-        return [current_stack]
-    new_stack = [leaf] + current_stack
-    yielded = False
-    for parent in leaf.parents:
-        if parent not in new_stack:
-            for ret in _iter_parents(parent, new_stack):
-                yield ret
-                yielded = True
-    if not yielded:
-        # It's the end of the path. Begin root yields
-        yield new_stack
-
-
-def _iter_children(leaf, current_stack=[], ignore=[]):
-    if leaf in ignore:
-        return [current_stack]
-    new_stack = current_stack + [leaf]
-    yielded = False
-    for child in leaf.children:
-        if child not in new_stack:
-            for ret in _iter_children(child, new_stack, ignore):
-                yield ret
-                yielded = True
-    if not yielded:
-        # It's the end of the path. Begin leaf yields
-        yield new_stack
-
+    while len(cut):
+        roots = [k for k, v in cut.pred.items() if not v]
+        if not roots:
+            # We can put the cycles off until the end, since they are unreachable they will not be deleted
+            # To process the cycles, we pick a node, find the longest path backwards, and then forwards from that node.
+            # We repeat this until all nodes are used.
+            # Note that since there are no roots, every node in the component *must* be reachable.
+            root = next(iter(cut))
+            backwards = _edge_bfs(cut, root, networkx.DiGraph.predecessors)
+            # No actually the longest in the whole graph, but it is the longest in the component, so it's irrelevant.
+            longest = _edge_bfs(cut, backwards[0], networkx.DiGraph.neighbors)
+        else:
+            longest = max((_edge_bfs(cut, root, networkx.DiGraph.neighbors) for root in roots), key=_score_chain)
+        longest.reverse()
+        ret.append(longest)
+        cut.remove_nodes_from(longest)
+    return ret

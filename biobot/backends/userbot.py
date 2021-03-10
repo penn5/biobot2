@@ -55,10 +55,10 @@ class UserbotBackend(backends.Backend):
         self.client.flood_sleep_threshold = 0
 
     async def get_joined_users(self):
-        ret = []
+        ret = {}
         try:
             async for user in self.client.iter_participants(self.group):
-                ret.append((user.id, user.username))
+                ret[(user.id, user.username)] = {"deleted": user.deleted}
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         return ret

@@ -24,8 +24,12 @@ from . import core
 from .translations import tr
 import logging
 import time
+import networkx
 
 logger = logging.getLogger(__name__)
+
+
+FILE_NAMES = set(("chain.gml", "raw_chain.forest"))
 
 
 def error_handler(func):
@@ -66,6 +70,14 @@ async def anext(aiter, default=False):
         return default
 
 
+def _stringize(data):
+    if data is None:
+        return "None"
+    if isinstance(data, str):
+        return repr(data)
+    raise ValueError
+
+
 class BioBot:
     def __init__(self, api_id, api_hash, bot_token, main_group,
                  admissions_group, bot_group, data_group, rules_username, extra_groups=[], sudo_users=[]):
@@ -80,29 +92,27 @@ class BioBot:
         await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username
-        eoc_regex = f"(?:$|\s|@{me.username}(?:$|\s))"
+        start = "^(?:\/|!)"
+        eoc = f"(?:$|\s|@{me.username}(?:$|\s))"
+        data = "(?:(?:#data_?)?(\d+))"
         self.client.add_event_handler(self.ping_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/ping" + eoc_regex))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}ping{eoc}"))
         self.client.add_event_handler(self.chain_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/chain"
-                                                                 + eoc_regex + "(?:#data)?(\d+)?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}chain{eoc}{data}?"))
+        self.client.add_event_handler(self.notinchain_command,
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}notinchain{eoc}{data}?"))
         self.client.add_event_handler(self.allchains_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/allchains"
-                                                                 + eoc_regex + "(?:#data)?(\d+)?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}allchains{eoc}{data}?"))
         self.client.add_event_handler(self.fetchdata_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/fetchdata"
-                                                                 + eoc_regex + "(?:#data)?(\d+)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}(?:get|fetch)data{eoc}{data}?"))
         self.client.add_event_handler(self.diff_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/diff"
-                                                                 + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}tdiff{eoc}{data}(?: {data})?"))
         self.client.add_event_handler(self.gdiff_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/gdiff"
-                                                                 + eoc_regex + "(?:#data)?(\d*)(?: )?(?:#data)?(\d*)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.link_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/(?:perma)?link"
-                                                                 + eoc_regex + "(?:#data)?(\d*) ([a-zA-z0-9_]{5,})"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}(?:perma)?link{eoc}(?:{data} )?@?([a-zA-Z0-9_]{{5,}}|[0-9]+)"))
         self.client.add_event_handler(self.start_command,
-                                      telethon.events.NewMessage(incoming=True, pattern="/start\s?(.*)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}start{eoc}(.*)"))
         self.client.add_event_handler(self.user_joined_admission,
                                       telethon.events.ChatAction(chats=self.admissions_group))
         self.client.add_event_handler(self.user_joined_main,
@@ -122,87 +132,90 @@ class BioBot:
 
     @error_handler
     async def ping_command(self, event):
-        await event.reply(await tr(event, "pong"), silent=True)
+        await event.reply(await tr(event, "pong"))
 
     @error_handler
     @protected
     async def chain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"), silent=True)
-        forest, chain = await core.get_chain(self.target, await self._select_backend(event, error=new))
-        data = await self._store_data(forest)
+        new = await event.reply(await tr(event, "please_wait"))
+        graph, chain = await core.get_chain(self.target, await self._select_backend(event, error=new))
+        data = await self._store_data(graph)
         await send(new, (await tr(event, "chain_format")).format(len(chain), data,
-                                                                 (await tr(event, "chain_delim")).join(user.username
+                                                                 (await tr(event, "chain_delim")).join(user
                                                                                                        for user in
-                                                                                                       chain)))
+                                                                                                       await _format_user(chain, graph, False))))
+
+    @error_handler
+    @protected
+    async def notinchain_command(self, event):
+        new = await event.reply(await tr(event, "please_wait"))
+        graph, antichain = await core.get_notinchain(self.target, await self._select_backend(event, error=new))
+        data = await self._store_data(graph)
+        await send(new, data + "\n" + "\n".join(user for user in await _format_user((user for user in antichain if graph.nodes[user]["uid"] is not None and not graph.nodes[user]["deleted"]), graph, True)))
 
     @error_handler
     @protected
     async def allchains_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"), silent=True)
-        forest, chains = await core.get_chains(await self._select_backend(event, error=new))
-        data = await self._store_data(forest)
-        out = [" ⇒ ".join(user.username for user in chain) for chain in chains]
+        new = await event.reply(await tr(event, "please_wait"))
+        graph, chains = await core.get_chains(await self._select_backend(event, error=new))
+        data = await self._store_data(graph)
+        out = [" ⇒ ".join(await _format_user(chain, graph, False)) for chain in chains if len(chain) > 1 or graph.nodes[chain[0]]["uid"] is not None]
         await send(new, data + " " + "\n\n".join(out))
 
     @error_handler
     @protected
     async def fetchdata_command(self, event):
-        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"),
-                          silent=True)
+        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
 
     @error_handler
     @protected
     async def diff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"), silent=True)
+        new = await event.reply(await tr(event, "please_wait"))
         backend = await self._select_backend(event, default_backend=False, error=new)
         if not backend:
             return
-        forest, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=new))
-        data = await self._store_data(forest)
-        new_uids, gone_uids, username_replacements, username_changes, new_bios, gone_bios = diff
-        delim = await tr(event, "diff_delim")
-        new_uids = delim.join(_format_user(user) for user in new_uids)
-        gone_uids = delim.join(_format_user(user) for user in gone_uids)
-        username_delim = await tr(event, "diff_username_delim")
-        username_replacements = delim.join(_format_user(user1) + username_delim + _format_user(user2)
-                                           for user1, user2 in username_replacements)
-        username_changes = delim.join(_format_user(user1) + username_delim + _format_user(user2)
-                                      for user1, user2 in username_changes)
-        parent_delim = await tr(event, "diff_parents_delim")
-        new_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
-                              + username_delim + user
-                              for parent1, parent2, user in new_bios)
-        gone_bios = delim.join(_format_user(parent1) + parent_delim + _format_user(parent2)
-                               + username_delim + user
-                               for parent1, parent2, user in gone_bios)
-
-        await send(new, (await tr(event, "diff_format")).format(data, new_uids, gone_uids, username_replacements,
-                                                                username_changes, new_bios, gone_bios))
+        graph, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=new), await tr(event, "diff_username_delim"), "\n")
+        data = await self._store_data(graph)
+        old_only_edges, new_only_edges, uid_edges, username_edges, old_only_names, new_only_names = diff
+        await send(new, (await tr(event, "diff_format")).format(data, new_only_names, old_only_names, username_edges,
+                                                                uid_edges, new_only_edges, old_only_edges), link_preview=False)
 
     @error_handler
     @protected
     async def gdiff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"), silent=True)
+        new = await event.reply(await tr(event, "please_wait"))
         backend = await self._select_backend(event, default_backend=False, error=new)
         if not backend:
             return
-        forest, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new))
-        await self._store_data(forest)
+        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new))
+        await self._store_data(graph)
         await event.reply(file=diff, force_document=True)
         await new.delete()
 
     @error_handler
     @protected
     async def link_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"), silent=True)
-        data = await self._select_backend(event, default_backend=False, error=new)
-        if not data:
-            await send(new, await tr(event, "invalid_id"))
+        new = await event.reply(await tr(event, "please_wait"))
+        data = await self._select_backend(event, error=new)
+        graph = await core.get_bios(data)
+        name = event.pattern_match[2]
+        try:
+            name = int(name)
+        except ValueError:
+            filterfunc = lambda x: x[1]["username"] and x[1]["username"].casefold() == name.casefold()
+        else:
+            filterfunc = lambda x: x[1]["uid"] == name
+        ret = filter(filterfunc, graph.nodes.items())
+        try:
+            ret = next(ret)
+        except StopIteration:
+            await send(new, await tr(event, "invalid_user"))
             return
-        ret = data.get_node(event.pattern_match[2], add=False)
-        await send(new, "<a href=\"tg://user?id={}\">".format(ret.uid) + ret.username + "</a>")
+        await send(new, await _format_user(ret[0], graph, True))
 
     async def start_command(self, event):
+        if event.chat_id == self.admissions_group:
+            return await self.user_joined_admission(event)
         if not event.is_private:
             return
         msg = event.pattern_match[1]
@@ -227,8 +240,13 @@ class BioBot:
 
     @error_handler
     async def user_joined_admission(self, event):
-        if event.user_joined or event.user_added:
-            cb = event.user_id.to_bytes(4, "big")
+        cb = None
+        if isinstance(event, telethon.events.ChatAction.Event) and (event.user_joined or event.user_added):
+            cb = event.user_id
+        if isinstance(event, telethon.events.NewMessage.Event):
+            cb = event.sender_id
+        if cb is not None:
+            cb = cb.to_bytes(4, "big")
             await event.reply(await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
 
@@ -276,14 +294,14 @@ class BioBot:
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             await event.answer(await tr(event, "button_loading"))
             return
-        forest, chain = await core.get_chain(self.target, self.backend)
+        graph, chain = await core.get_chain(self.target, self.backend)
         input_entity = await event.get_input_sender()
         entity = await self.client.get_entity(input_entity)  # To prevent caching
-        if entity.username and entity.username.lower() in (user.username.lower() for user in chain):
+        if entity.username and entity.username.lower() in (name.lower() for name in chain):
             await event.answer(await tr(event, "already_in_chain"), alert=True)
             await message.edit(await tr(event, "already_in_chain"), buttons=None)
             return
-        await self.callback_query_done(event, message, b"d" + event.data[1:5] + int(time.time()).to_bytes(4, "big") + chain[0].username.encode("ascii"))
+        await self.callback_query_done(event, message, b"d" + event.data[1:5] + int(time.time()).to_bytes(4, "big") + next(filter(lambda name: isinstance(name, str), chain)).encode("ascii"))
 
     async def callback_query_done(self, event, message, data=None):
         if data is None:
@@ -348,7 +366,7 @@ class BioBot:
             error = event
         if default_backend is None:
             default_backend = self.backend
-            data_id = None
+        data_id = None
         try:
             data_id_str = getattr(event, "pattern_match", ())[match_id + 1]
             if data_id_str:
@@ -357,18 +375,18 @@ class BioBot:
             await send(error, await tr(event, "invalid_id"))
         except IndexError:
             pass
-        if getattr(event, "is_reply", False) and not match_id:
+        if data_id is None and getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
-            if getattr(getattr(reply, "file", None), "name", None) == "raw_chain.forest":
+            if getattr(getattr(reply, "file", None), "name", None) in FILE_NAMES:
                 if event.from_id.user_id in self.sudo_users:
-                    return pickle.loads(await reply.download_media(bytes))
+                    return (await reply.download_media(bytes), reply.file.name)
                 else:
                     await send(error, await tr(message, "untrusted_forbidden"))
                     return
             if data_id is None:
                 try:
-                    data_id = int(re.search(r"\s#data(\d+)\s", reply.text)[1])
-                except (ValueError, TypeError):
+                    data_id = int(re.search(r"\s#data_?(\d+)\s", reply.text)[0])
+                except (ValueError, TypeError, IndexError):
                     pass
         if data_id is None:
             return default_backend
@@ -376,48 +394,84 @@ class BioBot:
         if data is None:
             await send(error, await tr(event, "invalid_id"))
             return default_backend
-        return pickle.loads(await data.download_media(bytes))
+        return (await data.download_media(bytes), data.file.name)
 
     async def _fetch_data(self, data_id):
-        print(data_id)
         ret = await self.client.get_messages(self.data_group, ids=data_id)
-        if getattr(getattr(ret, "file", None), "name", None) != "raw_chain.forest":
+        if getattr(getattr(ret, "file", None), "name", None) not in FILE_NAMES:
             return None
         return ret
 
-    async def _store_data(self, forest):
-        nodes = forest.get_nodes()
+    async def _store_data(self, graph):
+        graph = graph.copy()
         await self.client.get_participants(self.main_group)
-        for node in nodes:
-            try:
-                entity = await self.client.get_input_entity(node.uid)
-            except (ValueError, TypeError):
-                entity = None
-            if isinstance(entity, telethon.tl.types.InputPeerUser) and entity.user_id != node.uid and node.uid:
-                logger.error("Username %s changed UID from %d to %r", node.username, node.uid, entity)
-                continue
-            node.extras["entity"] = entity
+        for node, data in graph.nodes.items():
+            if data["uid"] and not data.get("access_hash", None):
+                try:
+                    entity = await self.client.get_input_entity(telethon.tl.types.PeerUser(data["uid"]))
+                except (ValueError, TypeError):
+                    entity = None
+                if isinstance(entity, telethon.tl.types.InputPeerUser):
+                    data["access_hash"] = entity.access_hash
         data = io.BytesIO()
-        data.name = "raw_chain.forest"
-        pickle.dump(forest, data)
+        data.name = "chain.gml"
+        networkx.write_gml(graph, data, stringizer=_stringize)
         data.seek(0)
         message = await self.client.send_message(self.data_group, file=data)
-        return "#data{}".format(message.id)
+        return "#data_{}".format(message.id)
 
 
-def _format_user(user):
-    return "<a href=\"tg://user?id={}\">".format(user.uid) + str(user.uid) + "</a>:" + str(user.username)
+async def _format_user(name, graph, link):
+    # the data MUST have been stored before calling this method
+    if not isinstance(name, (str, int)):
+        return [await _format_user(this_name, graph, link) for this_name in name]
+    if link:
+        uid = graph.nodes[name]["uid"]
+        if uid is None:
+            ret = "<a href=\"https://t.me/{}\">{}</a>"
+        else:
+            ret = "<a href=\"tg://user?id={}\">{}</a>"
+    else:
+        return str(name)
+    return ret.format(uid or name, name)
+
+
+def _move_entities(text, entities, move=0):
+    for entity in entities.copy():
+        if move:
+            entity.offset -= move
+        if entity.offset + entity.length <= 0:
+            entities.remove(entity)
+            continue
+        if entity.offset < 0:
+            entity.length += entity.offset
+            entity.offset = 0
+    length = 4096
+    count = 0
+    current_entities = []
+    for entity in entities:
+        count += 1
+        if count > 100:
+            length = entity.offset
+            break
+        current_entities.append(entity)
+    current_text = telethon.extensions.html.unparse(text[:length], current_entities)
+    text = text[length:]
+    return current_text, text, entities, length
 
 
 async def send(message, text, **kwargs):
+    text, entities = telethon.extensions.html.parse(text)
+    entities.sort(key=lambda e: e.offset)
     if message.out:
+        current_text, text, entities, length = _move_entities(text, entities)
         try:
-            await message.edit(text[:4096], **kwargs)
+            await message.edit(current_text, **kwargs)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             pass
+        current_text, text, entities, length = _move_entities(text, entities, length)
     else:
-        message = await message.reply(text[:4096], silent=True, **kwargs)
-    text = text[4096:]
-    while text:
-        await message.reply(text[:4096], silent=True)
-        text = text[4096:]
+        message = await message.reply("…", silent=True)
+    while current_text:
+        await (await message.reply("…", silent=True)).edit(current_text, **kwargs)
+        current_text, text, entities, length = _move_entities(text, entities, length)
