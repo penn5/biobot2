@@ -21,37 +21,47 @@ import networkx as nx
 import io
 import random
 import math
+import operator
 
 
-def _default_namer(uid, username, full):
+def _default_namer(uid, username, full, node):
     if not username:
-        return uid
-    if full and uid:
-        return f"{username} ({uid})"
-    return username
+        ret = str(uid)
+    elif full and uid:
+        ret = f"{username} ({uid})"
+    else:
+        ret = username
+    if node.get("deleted", False):
+        ret += "⌫"
+    return ret
 
-
-def _linking_namer(uid, username, full):
+def _linking_namer(uid, username, full, node):
     if not uid:
-        return f"<a href=\"https://t.me/{username}\">{username}</a>"
-    if full and username and uid:
-        return f"<a href=\"https://t.me/{username}\">{username}</a> (<a href=\"tg://user?id={uid}\">{uid}</a>)"
-    return f"<a href=\"tg://user?id={uid}\">{username or uid}</a>"
+        ret = f"<a href=\"https://t.me/{username}\">{username}</a>"
+    elif full and username and uid:
+        ret = f"<a href=\"https://t.me/{username}\">{username}</a> (<a href=\"tg://user?id={uid}\">{uid}</a>)"
+    else:
+        ret = f"<a href=\"tg://user?id={uid}\">{username or uid}</a>"
+    if node.get("deleted", False):
+        ret += "⌫"
+    return ret
 
 
 def _graph_to_dict(data):
     ret = {}
+    names = {}
     for name, children in data.adjacency():
         node = data.nodes[name]
         uid = node["uid"]
-        username = node["username"]
-        ret[(uid, username.casefold() if username else username)] = [child.casefold() for child in children]
-    return ret
+        username = node["username"] and node["username"].casefold()
+        ret[(uid, username)] = [child.casefold() for child in children]
+        names[(uid, username)] = name
+    return ret, names
 
 
-def _generate_diff_data(old_data, new_data, namer):
-    old_data = _graph_to_dict(old_data)
-    new_data = _graph_to_dict(new_data)
+def _generate_diff_data(old_graph, new_graph, namer):
+    old_data, old_map = _graph_to_dict(old_graph)
+    new_data, new_map = _graph_to_dict(new_graph)
 
     old_uid_to_username = {uid: username for uid, username in old_data.keys() if uid is not None and username is not None}
     new_uid_to_username = {uid: username for uid, username in new_data.keys() if uid is not None and username is not None}
@@ -65,8 +75,8 @@ def _generate_diff_data(old_data, new_data, namer):
         if username is not None and old_username_to_uid.get(username, False) not in (uid, False):
             duplicate_usernames.add(username)
 
-    old_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames) for uid, username in old_data}
-    new_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames) for uid, username in new_data}
+    old_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames, old_graph.nodes[old_map[(uid, username)]]) for uid, username in old_data}
+    new_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames, new_graph.nodes[new_map[(uid, username)]]) for uid, username in new_data}
 
     old_edges = {(old_names[username or uid], old_names.setdefault(child, child)) for (uid, username), children in old_data.items() for child in children}
     new_edges = {(new_names[username or uid], new_names.setdefault(child, child)) for (uid, username), children in new_data.items() for child in children}
@@ -156,6 +166,19 @@ def draw_chain_diff(old_data, new_data):
             for source in sources:
                 for dest in dests:
                     dist[source][dest] = 10 + len(sources) / 10 + len(dests) / 10
+    # prevent duplicate distances
+    last_dist = -1
+    last_keys = []
+    for source, dists in dist.items():
+        for dest, distance in sorted(dists.items(), key=lambda k: (k[1], str(k[0]))):
+            if distance != last_dist:
+                count = len(last_keys)
+                interval = 2 / (count + 1)
+                for i, key in enumerate(last_keys):
+                    dists[key] = (i + 1) * interval + last_dist - 1
+                last_keys.clear()
+                last_dist = distance
+            last_keys.append(dest)
     for component in nx.weakly_connected_components(graph):
         x = random.triangular()
         y = random.triangular()
