@@ -133,7 +133,7 @@ def make_graph(data, users_data={}):
         for child in children:
             child_name = username_to_name.get(child.casefold(), None)
             if child_name is None:
-                username_to_name[child] = child
+                username_to_name[child.casefold()] = child
                 graph.add_node(child, username=child, uid=None)
                 child_name = child
             graph.add_edge(name, child_name)
