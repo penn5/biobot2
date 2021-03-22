@@ -59,7 +59,7 @@ def _graph_to_dict(data):
     return ret, names
 
 
-def _generate_diff_data(old_graph, new_graph, namer):
+def _generate_diff_data(old_graph, new_graph, namer, ignore_edits):
     old_data, old_map = _graph_to_dict(old_graph)
     new_data, new_map = _graph_to_dict(new_graph)
 
@@ -98,25 +98,27 @@ def _generate_diff_data(old_graph, new_graph, namer):
         old_name = old_names[old_uid_to_username.get(uid, uid)]
         new_name = new_names[new_uid_to_username.get(uid, uid)]
         uid_edges.add((old_name, new_name))
-#        common_names.add(old_name)
-#        common_names.add(new_name)
-#        old_only_names.discard(old_name)
-#        new_only_names.discard(new_name)
+        if ignore_edits:
+            common_names.add(old_name)
+            common_names.add(new_name)
+            old_only_names.discard(old_name)
+            new_only_names.discard(new_name)
 
     for username in duplicate_usernames:
         old_name = old_names[username]
         new_name = new_names[username]
         username_edges.add((old_name, new_name))
-#        common_names.add(old_name)
-#        common_names.add(new_name)
-#        old_only_names.discard(old_name)
-#        new_only_names.discard(new_name)
+        if ignore_edits:
+            common_names.add(old_name)
+            common_names.add(new_name)
+            old_only_names.discard(old_name)
+            new_only_names.discard(new_name)
 
     return common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names
 
 
-def _generate_diff_graph(old_data, new_data, namer):
-    common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, namer)
+def _generate_diff_graph(old_data, new_data, namer, ignore_edits):
+    common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, namer, ignore_edits)
     graph = nx.DiGraph()
     for src, dest in common_edges:
         graph.add_edge(src, dest, type="common", weight=0.5)
@@ -140,7 +142,7 @@ def _generate_diff_graph(old_data, new_data, namer):
 
 
 def textual_chain_diff(old_data, new_data, directed_delim, line_delim):
-    _, old_only_edges, new_only_edges, uid_edges, username_edges, _, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, _linking_namer)
+    _, old_only_edges, new_only_edges, uid_edges, username_edges, _, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, _linking_namer, True)
     old_only_edges = line_delim.join(directed_delim.join(edge) for edge in old_only_edges)
     new_only_edges = line_delim.join(directed_delim.join(edge) for edge in new_only_edges)
     uid_edges = line_delim.join(directed_delim.join(edge) for edge in uid_edges)
@@ -151,7 +153,7 @@ def textual_chain_diff(old_data, new_data, directed_delim, line_delim):
 
 
 def draw_chain_diff(old_data, new_data):
-    graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_graph(old_data, new_data, _default_namer)
+    graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_graph(old_data, new_data, _default_namer, False)
 
     fig = plt.figure(figsize=(200, 124))
     ax = plt.axes()

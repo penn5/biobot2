@@ -106,7 +106,7 @@ class BioBot:
         self.client.add_event_handler(self.fetchdata_command,
                                       telethon.events.NewMessage(incoming=True, pattern=f"{start}(?:get|fetch)data{eoc}{data}?"))
         self.client.add_event_handler(self.diff_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}tdiff{eoc}{data}(?: {data})?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}tdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.gdiff_command,
                                       telethon.events.NewMessage(incoming=True, pattern=f"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.link_command,
