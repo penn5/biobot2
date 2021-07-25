@@ -29,9 +29,9 @@ class BotBackend(userbot.UserbotBackend):
     def get_instances(cls, bot, common_config, configs):
         for config in configs:
             this_bot = config.pop("bot") or bot
-            return [cls(this_bot, **config, **common_config)]
+            yield cls(this_bot, **config, **common_config)
 
     async def init(self):
         if self.token:
-            self.bot.start(bot_token=self.token)
+            await self.client.start(bot_token=self.token)
         self.client.flood_sleep_threshold = 0
