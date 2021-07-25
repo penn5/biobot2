@@ -17,7 +17,6 @@
 import ast
 import collections
 import io
-import itertools
 import networkx
 import pickle
 
@@ -104,7 +103,7 @@ def _destringize(data):
         return None
     try:
         return ast.literal_eval(data)
-    except SyntaxError:
+    except SyntaxError as e:
         raise ValueError from e
 
 

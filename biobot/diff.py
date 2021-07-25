@@ -15,13 +15,10 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import collections
 from matplotlib import pyplot as plt
 import networkx as nx
 import io
 import random
-import math
-import operator
 
 
 def _default_namer(uid, username, full, node):
@@ -87,7 +84,6 @@ def _generate_diff_data(old_graph, new_graph, namer, ignore_edits):
 
     old_names_set = set(old_names.values())
     new_names_set = set(new_names.values())
-    all_names = old_names_set | new_names_set
     common_names = old_names_set | new_names_set
     old_only_names = old_names_set - new_names_set
     new_only_names = new_names_set - old_names_set

@@ -18,7 +18,6 @@ import functools
 import telethon
 import io
 import re
-import pickle
 from telethon.tl.custom.button import Button
 from . import core
 from .translations import tr
@@ -92,27 +91,27 @@ class BioBot:
         await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username
-        start = "^(?:\/|!)"
-        eoc = f"(?:$|\s|@{me.username}(?:$|\s))"
-        data = "(?:(?:#data_?)?(\d+))"
+        start = r"^(?:\/|!)"
+        eoc = fr"(?:$|\s|@{me.username}(?:$|\s))"
+        data = r"(?:(?:#data_?)?(\d+))"
         self.client.add_event_handler(self.ping_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}ping{eoc}"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}ping{eoc}"))
         self.client.add_event_handler(self.chain_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}chain{eoc}{data}?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}chain{eoc}{data}?"))
         self.client.add_event_handler(self.notinchain_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}notinchain{eoc}{data}?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}notinchain{eoc}{data}?"))
         self.client.add_event_handler(self.allchains_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}allchains{eoc}{data}?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}allchains{eoc}{data}?"))
         self.client.add_event_handler(self.fetchdata_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}(?:get|fetch)data{eoc}{data}?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}(?:get|fetch)data{eoc}{data}?"))
         self.client.add_event_handler(self.diff_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}tdiff{eoc}(?:{data}(?: {data})?)?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}tdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.gdiff_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.link_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}(?:perma)?link{eoc}(?:{data} )?@?([a-zA-Z0-9_]{{5,}}|[0-9]+)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}(?:perma)?link{eoc}(?:{data} )?@?([a-zA-Z0-9_]{{5,}}|[0-9]+)"))
         self.client.add_event_handler(self.start_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=f"{start}start{eoc}(.*)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}start{eoc}(.*)"))
         self.client.add_event_handler(self.user_joined_admission,
                                       telethon.events.ChatAction(chats=self.admissions_group))
         self.client.add_event_handler(self.user_joined_main,
@@ -213,6 +212,7 @@ class BioBot:
             return
         await send(new, await _format_user(ret[0], graph, True))
 
+    @error_handler
     async def start_command(self, event):
         if event.chat_id == self.admissions_group:
             return await self.user_joined_admission(event)

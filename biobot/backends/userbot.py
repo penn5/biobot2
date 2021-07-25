@@ -17,7 +17,6 @@
 from .. import backends
 import telethon
 import re
-import time
 
 
 USERNAME_REGEX = re.compile(r'@[_0-9a-z]{5,32}')
