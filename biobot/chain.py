@@ -125,21 +125,18 @@ def make_graph(data, users_data={}):
         data = data.get_dict()
     else:
         old_data = None
-    username_to_name = {username.casefold(): username or uid for uid, username in data if username}
     for uid, username in data:
-        graph.add_node(username or uid, username=username, uid=uid, **users_data.get((uid, username), {}))
+        graph.add_node(username.casefold() if username else uid, username=username, uid=uid, **users_data.get((uid, username), {}))
     for (uid, username), children in data.items():
-        name = username or uid
+        name = username.casefold() if username else uid
         for child in children:
-            child_name = username_to_name.get(child.casefold(), None)
-            if child_name is None:
-                username_to_name[child.casefold()] = child
-                graph.add_node(child, username=child, uid=None)
-                child_name = child
+            child_name = child.casefold()
+            if child_name not in graph:
+                graph.add_node(child_name, username=child, uid=None)
             graph.add_edge(name, child_name)
     if old_data:
         for node in old_data.get_nodes():
-            name = node.username or node.uid
+            name = node.username.casefold() if node.username else node.uid
             graph.nodes[name]["access_hash"] = getattr(node.extras.get("entity", None), "access_hash", None)
             graph.nodes[name]["deleted"] = None
     return graph
