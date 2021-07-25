@@ -35,6 +35,7 @@ def _default_namer(uid, username, full, node):
         ret += "⌫"
     return ret
 
+
 def _linking_namer(uid, username, full, node):
     if not uid:
         ret = f"<a href=\"https://t.me/{username}\">{username}</a>"

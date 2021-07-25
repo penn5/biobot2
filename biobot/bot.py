@@ -381,7 +381,7 @@ class BioBot:
                 if event.from_id.user_id in self.sudo_users:
                     return (await reply.download_media(bytes), reply.file.name)
                 else:
-                    await send(error, await tr(message, "untrusted_forbidden"))
+                    await send(error, await tr(error, "untrusted_forbidden"))
                     return
             if data_id is None:
                 try:
