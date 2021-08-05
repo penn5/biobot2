@@ -323,8 +323,8 @@ class BioBot:
                 return
             input_entity = await event.get_input_sender()
             entity = await self.client.get_entity(input_entity)  # To prevent caching
-            bio = [username.lower() for username in await self.backend.get_bio_links(entity.id, entity.username)]
-        if skip or data[9:].decode("ascii").lower() not in bio:
+            bio = [username.casefold() for username in await self.backend.get_bio_links(entity.id, entity.username)]
+        if skip or data[9:].decode("ascii").casefold() not in bio:
             await message.edit(await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), data)],
                                         [Button.inline(await tr(event, "cancel"), b"c" + data[1:5])],
@@ -349,7 +349,10 @@ class BioBot:
             return
         invite = await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(self.main_group))
         escaped = invite.link.split("/")[-1]
-        await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
+        try:
+            await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
+        except telethon.errors.rpcerrorlist.QueryIdInvalidError:
+            pass
         await message.edit(await tr(message, "please_click"),
                            buttons=[[Button.inline(await tr(message, "continue"), data)],
                                     [Button.inline(await tr(message, "cancel"), b"c" + data[1:5])],
