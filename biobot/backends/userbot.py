@@ -19,7 +19,7 @@ import telethon
 import re
 
 
-USERNAME_REGEX = re.compile(r'@[_0-9a-z]{5,32}')
+USERNAME_REGEX = re.compile(r'@[a-z][_0-9a-z]{4,31}', re.I)
 
 
 class UserbotBackend(backends.Backend):
@@ -74,7 +74,7 @@ class UserbotBackend(backends.Backend):
             raise backends.Unavailable("Usernames do not match.")
         if not full.about:
             return []
-        return [x.group()[1:] for x in USERNAME_REGEX.finditer(full.about.lower())]
+        return [x.group()[1:] for x in USERNAME_REGEX.finditer(full.about)]
 
     async def close(self):
         await self.client.disconnect()
