@@ -5,7 +5,7 @@
     "cancel": "Cancel the process",
     "cancelled": "Cancelled. To restart, leave and rejoin the group.",
     "chain_delim": " \u21d2 ",
-    "chain_format": "#chain {} {}\n\nChain:\n\n{}",
+    "chain_format": "#chain_{} {}\n\nChain:\n\n{}",
     "click_forbidden": "You are not allowed to use this button.",
     "click_me": "Click me!",
     "continue": "Continue the process",
