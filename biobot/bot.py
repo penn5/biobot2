@@ -48,7 +48,7 @@ def protected(func):
         if event.chat_id != self.main_group and \
                 event.chat_id != self.bot_group and \
                 event.chat_id not in self.extra_groups and \
-                event.from_id.user_id not in self.sudo_users:
+                getattr(event.from_id, "user_id", None) not in self.sudo_users:
             await event.reply(await tr(event, "forbidden"))
         else:
             return await func(self, event)
@@ -94,10 +94,13 @@ class BioBot:
         start = r"^(?:\/|!)"
         eoc = fr"(?:$|\s|@{me.username}(?:$|\s))"
         data = r"(?:(?:#data_?)?(\d+))"
+        username = r"(?:@?([a-zA-Z0-9_]{{5,}}|[0-9]+))"
         self.client.add_event_handler(self.ping_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}ping{eoc}"))
         self.client.add_event_handler(self.chain_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}chain{eoc}{data}?"))
+        self.client.add_event_handler(self.chain_command,
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}locate{eoc}{data}?(?: {username})?"))
         self.client.add_event_handler(self.notinchain_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}notinchain{eoc}{data}?"))
         self.client.add_event_handler(self.allchains_command,
@@ -109,7 +112,7 @@ class BioBot:
         self.client.add_event_handler(self.gdiff_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.link_command,
-                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}(?:perma)?link{eoc}(?:{data} )?@?([a-zA-Z0-9_]{{5,}}|[0-9]+)"))
+                                      telethon.events.NewMessage(incoming=True, pattern=fr"{start}(?:perma)?link{eoc}(?:{data} )?{username}"))
         self.client.add_event_handler(self.start_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}start{eoc}(.*)"))
         self.client.add_event_handler(self.user_joined_admission,
