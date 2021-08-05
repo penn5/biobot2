@@ -21,6 +21,7 @@ import re
 from telethon.tl.custom.button import Button
 from . import core
 from .translations import tr
+from .backends.bot import BotBackend
 import logging
 import time
 import networkx
@@ -128,6 +129,7 @@ class BioBot:
 
     async def run(self, backend):
         self.backend = backend
+        self.bot_backend = BotBackend(bot=None, group_id=self.main_group, api_id=None, api_hash=None)
         await self.client.send_message(self.bot_group, "🆙 and 🏃ing!")
         print("Up and running!")
         await self.client.run_until_disconnected()
@@ -323,7 +325,7 @@ class BioBot:
                 return
             input_entity = await event.get_input_sender()
             entity = await self.client.get_entity(input_entity)  # To prevent caching
-            bio = [username.casefold() for username in await self.backend.get_bio_links(entity.id, entity.username)]
+            bio = [username.casefold() for username in await self.bot_backend.get_bio_links(entity.id, entity.username)]
         if skip or data[9:].decode("ascii").casefold() not in bio:
             await message.edit(await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), data)],
