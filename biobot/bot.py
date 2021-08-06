@@ -92,10 +92,20 @@ class BioBot:
         await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username
+        self.admissions_entity = await self.client.get_entity(self.admissions_group)
+        self.target = self.admissions_entity.username
+        self.data_group = await self.client.get_input_entity(self.data_group)
+        self.bot_backend = BotBackend(bot=self.client, group_id=self.main_group, api_id=None, api_hash=None)
+        await self.bot_backend.init()
+        await self.add_handlers()
+        return self.client
+
+    async def add_handlers(self):
         start = r"^(?:\/|!)"
-        eoc = fr"(?:$|\s|@{me.username}(?:$|\s))"
+        eoc = fr"(?:$|\s|@{self.username}(?:$|\s))"
         data = r"(?:(?:#data_?)?(\d+))"
         username = r"(?:@?([a-zA-Z0-9_]{{5,}}|[0-9]+))"
+
         self.client.add_event_handler(self.ping_command,
                                       telethon.events.NewMessage(incoming=True, pattern=fr"{start}ping{eoc}"))
         self.client.add_event_handler(self.chain_command,
@@ -122,14 +132,9 @@ class BioBot:
                                       telethon.events.ChatAction(chats=self.main_group))
         self.client.add_event_handler(self.callback_query,
                                       telethon.events.CallbackQuery())
-        self.admissions_entity = await self.client.get_entity(self.admissions_group)
-        self.target = self.admissions_entity.username
-        self.data_group = await self.client.get_input_entity(self.data_group)
-        return self.client
 
     async def run(self, backend):
         self.backend = backend
-        self.bot_backend = BotBackend(bot=None, group_id=self.main_group, api_id=None, api_hash=None)
         await self.client.send_message(self.bot_group, "🆙 and 🏃ing!")
         print("Up and running!")
         await self.client.run_until_disconnected()
