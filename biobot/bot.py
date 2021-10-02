@@ -49,7 +49,8 @@ def protected(func):
         if event.chat_id != self.main_group and \
                 event.chat_id != self.bot_group and \
                 event.chat_id not in self.extra_groups and \
-                getattr(event.from_id, "user_id", None) not in self.sudo_users:
+                event.sender_id not in self.sudo_users:
+            print(event.sender_id)
             await event.reply(await tr(event, "forbidden"))
         else:
             return await func(self, event)
@@ -80,15 +81,19 @@ def _stringize(data):
 
 class BioBot:
     def __init__(self, api_id, api_hash, bot_token, main_group,
-                 admissions_group, bot_group, data_group, rules_username, extra_groups=[], sudo_users=[]):
+                 admissions_group, bot_group, data_group, rules_username, extra_groups=[], sudo_users=[],
+                 test_dc=0):
         self.bot_token, self.main_group, self.admissions_group = bot_token, main_group, admissions_group
         self.bot_group, self.data_group, self.rules_username = bot_group, data_group, rules_username
         self.extra_groups, self.sudo_users = extra_groups, sudo_users
         self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash)
         self.client.parse_mode = "html"
+        if test_dc:
+            self.client.session.set_dc(test_dc, "149.154.167.40", 80)
 
     async def init(self):
         await self.client.start(bot_token=self.bot_token)
+        print(self.main_group)
         await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username

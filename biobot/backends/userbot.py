@@ -23,11 +23,13 @@ USERNAME_REGEX = re.compile(r'@[a-z][_0-9a-z]{4,31}', re.I)
 
 
 class UserbotBackend(backends.Backend):
-    def __init__(self, phone, api_id, api_hash, group_id, auth_key=None):
+    def __init__(self, phone, api_id, api_hash, group_id, auth_key=None, test_dc=0):
         self.phone = phone
         self.group_id = group_id
         self.auth_key = auth_key
         session = telethon.sessions.MemorySession() if not auth_key else telethon.sessions.StringSession(auth_key)
+        if test_dc:
+            client.session.set_dc(test_dc, "149.154.167.40", 80)
         self.client = telethon.TelegramClient(session, api_id, api_hash)
 
     @classmethod
