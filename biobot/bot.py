@@ -50,7 +50,6 @@ def protected(func):
                 event.chat_id != self.bot_group and \
                 event.chat_id not in self.extra_groups and \
                 event.sender_id not in self.sudo_users:
-            print(event.sender_id)
             await event.reply(await tr(event, "forbidden"))
         else:
             return await func(self, event)
@@ -93,7 +92,6 @@ class BioBot:
 
     async def init(self):
         await self.client.start(bot_token=self.bot_token)
-        print(self.main_group)
         await self.client.get_participants(self.main_group)
         me = await self.client.get_me()
         self.username = me.username
