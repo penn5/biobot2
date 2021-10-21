@@ -29,7 +29,10 @@ class UserbotBackend(backends.Backend):
         self.auth_key = auth_key
         session = telethon.sessions.MemorySession() if not auth_key else telethon.sessions.StringSession(auth_key)
         if test_dc:
-            client.session.set_dc(test_dc, "149.154.167.40", 80)
+            session.set_dc(test_dc, "149.154.167.40", 80)
+            self.login_code = str(test_dc) * 5
+        else:
+            self.login_code = None
         self.client = telethon.TelegramClient(session, api_id, api_hash)
 
     @classmethod
@@ -41,7 +44,7 @@ class UserbotBackend(backends.Backend):
         if not self.auth_key:
             print(f"Signing in for {self.phone}")
         try:
-            await self.client.start(self.phone)
+            await self.client.start(self.phone, code_callback=self.login_code and (lambda: self.login_code))
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             print(f"Unable to sign in to {self.phone}")
             raise
@@ -59,7 +62,7 @@ class UserbotBackend(backends.Backend):
         ret = {}
         try:
             async for user in self.client.iter_participants(self.group):
-                ret[(user.id, user.username)] = {"deleted": user.deleted}
+                ret[(user.id, user.username)] = {"deleted": user.deleted, "access_hash": user.access_hash}
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         return ret
@@ -70,8 +73,13 @@ class UserbotBackend(backends.Backend):
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except ValueError:
-            await self.get_joined_users()
-            return await self.get_bio_links(uid, username)
+            members = await self.get_joined_users()
+            try:
+                user = telethon.types.InputUser(uid, members[(uid, username)]["access_hash"])
+            except KeyError:
+                # either uid was already a Peer in which case we should fail to avoid infinite retries, or the user just isn't there, in which case they have effectively a blank bio
+                return []
+            return await self.get_bio_links(user, username)
         if full.user.username != username:
             raise backends.Unavailable("Usernames do not match.")
         if not full.about:

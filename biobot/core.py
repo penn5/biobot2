@@ -48,7 +48,7 @@ async def get_diff(old, backend, *args, **kwargs):
     return new, diff.textual_chain_diff(old, new, *args, **kwargs)
 
 
-async def get_gdiff(old, backend):
+async def get_gdiff(old, backend, target):
     old = chain.make_graph(old)
     new = await get_bios(backend)
-    return new, diff.draw_chain_diff(old, new)
+    return new, diff.draw_chain_diff(old, new, target)

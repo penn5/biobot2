@@ -18,7 +18,7 @@
     "get_help": "Get more help",
     "invalid_id": "<code>Invalid ID</code>",
     "invalid_user": "User not found",
-    "invite_format": "Finally, you must join the group. Make sure not to leave it, or you will break the chain!\n\nhttps://t.me/joinchat/{}",
+    "invite_format": "Finally, you must join the group. Make sure not to leave it, or you will break the chain!\n\nhttps://{}",
     "join_help": "You need to put <code>@{}</code> in your Telegram bio and click 'Continue'",
     "loading_1m": "Loading...\n\u2139\ufe0f This process can take up to 1 minute \u2139\ufe0f",
     "please_click": "Please click a button below",

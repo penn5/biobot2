@@ -158,6 +158,8 @@ def _score_chain(chain):
 def _edge_bfs(graph, root, get_children):
     # root is returned last
     queue = collections.deque(((None, root),))
+    if root not in graph:
+        return [root]
     visited_nodes = set()
     nexts = {(None, root): None}
     in_scores = {root: 0}

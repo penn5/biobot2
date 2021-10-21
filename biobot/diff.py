@@ -17,8 +17,10 @@
 
 from matplotlib import pyplot as plt
 import networkx as nx
+import numpy as np
 import io
 import random
+from .chain import make_chain
 
 
 def _default_namer(uid, username, full, node):
@@ -111,11 +113,11 @@ def _generate_diff_data(old_graph, new_graph, namer, ignore_edits):
             old_only_names.discard(old_name)
             new_only_names.discard(new_name)
 
-    return common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names
+    return common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names, old_names, new_names
 
 
 def _generate_diff_graph(old_data, new_data, namer, ignore_edits):
-    common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, namer, ignore_edits)
+    common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names, old_names, new_names = _generate_diff_data(old_data, new_data, namer, ignore_edits)
     graph = nx.DiGraph()
     for src, dest in common_edges:
         graph.add_edge(src, dest, type="common", weight=0.5)
@@ -135,11 +137,11 @@ def _generate_diff_graph(old_data, new_data, namer, ignore_edits):
     for name in new_only_names:
         graph.add_node(name, type="new")
 
-    return graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names
+    return graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names, old_names, new_names
 
 
 def textual_chain_diff(old_data, new_data, directed_delim, line_delim):
-    _, old_only_edges, new_only_edges, uid_edges, username_edges, _, old_only_names, new_only_names = _generate_diff_data(old_data, new_data, _linking_namer, True)
+    _, old_only_edges, new_only_edges, uid_edges, username_edges, _, old_only_names, new_only_names, _, _ = _generate_diff_data(old_data, new_data, _linking_namer, True)
     old_only_edges = line_delim.join(directed_delim.join(edge) for edge in old_only_edges)
     new_only_edges = line_delim.join(directed_delim.join(edge) for edge in new_only_edges)
     uid_edges = line_delim.join(directed_delim.join(edge) for edge in uid_edges)
@@ -149,8 +151,8 @@ def textual_chain_diff(old_data, new_data, directed_delim, line_delim):
     return old_only_edges, new_only_edges, uid_edges, username_edges, old_only_names, new_only_names
 
 
-def draw_chain_diff(old_data, new_data):
-    graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names = _generate_diff_graph(old_data, new_data, _default_namer, False)
+def draw_chain_diff(old_data, new_data, target):
+    graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names, old_names, new_names = _generate_diff_graph(old_data, new_data, _default_namer, False)
 
     fig = plt.figure(figsize=(200, 124))
     ax = plt.axes()
@@ -188,6 +190,13 @@ def draw_chain_diff(old_data, new_data):
     nx.draw_networkx_nodes(graph, pos, ax=ax, nodelist=common_names, node_color="tab:blue", node_size=20)
     nx.draw_networkx_nodes(graph, pos, ax=ax, nodelist=old_only_names, node_color="tab:red", node_size=20)
     nx.draw_networkx_nodes(graph, pos, ax=ax, nodelist=new_only_names, node_color="tab:green", node_size=20)
+    if target:
+        old_chain = [old_names[username] for username in make_chain(old_data, target)]
+        old_chain = [(old_chain[i], old_chain[i + 1]) for i in range(len(old_chain) - 1)]
+        new_chain = [new_names[username] for username in make_chain(new_data, target)]
+        new_chain = [(new_chain[i], new_chain[i + 1]) for i in range(len(new_chain) - 1)]
+        nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=new_chain, width=6, alpha=0.1, edge_color=np.linspace(0, 1, len(new_chain)), edge_cmap=plt.get_cmap("cool"))
+        nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=old_chain, width=6, alpha=0.1, edge_color=np.linspace(0, 1, len(old_chain)), edge_cmap=plt.get_cmap("autumn"))
     nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=common_edges, width=2, alpha=0.5, edge_color="tab:blue")
     nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=new_only_edges, width=2, alpha=0.5, edge_color="tab:green")
     nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=old_only_edges, width=2, alpha=0.5, edge_color="tab:red")

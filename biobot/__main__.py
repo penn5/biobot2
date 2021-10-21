@@ -17,6 +17,7 @@
 import logging
 import asyncio
 import json
+import argparse
 from . import bot, backend_manager
 
 
@@ -24,7 +25,10 @@ logging.basicConfig(level=logging.WARNING)
 
 
 async def main():
-    config = json.load(open("config.json"))
+    parser = argparse.ArgumentParser(description="Launch BioBot2")
+    parser.add_argument("-f", "-c", "--config", default="config.json", type=open)
+    args = parser.parse_args()
+    config = json.load(args.config)
     frontend = bot.BioBot(main_group=config["common"]["group_id"], **config["frontend"])
     client = await frontend.init()
     async with backend_manager.Backends(config, client) as backend:
