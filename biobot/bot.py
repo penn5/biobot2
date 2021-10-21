@@ -314,7 +314,7 @@ class BioBot:
         input_entity = await event.get_input_sender()
         if not input_entity:
             # testmode support
-            await query.answer(await tr(event, "start_bot"), alert=True)
+            await event.answer(await tr(event, "start_bot"), alert=True)
             return
         entity = await self.client.get_entity(input_entity)  # To prevent caching
         if entity.username and entity.username.lower() in (name.lower() for name in chain):
@@ -341,7 +341,7 @@ class BioBot:
             input_entity = await event.get_input_sender()
             if not input_entity:
                 # testmode support
-                await query.answer(await tr(event, "start_bot"), alert=True)
+                await event.answer(await tr(event, "start_bot"), alert=True)
                 return
             entity = await self.client.get_entity(input_entity)  # To prevent caching
             bio = [username.casefold() for username in await self.bot_backend.get_bio_links(entity.id, entity.username)]
