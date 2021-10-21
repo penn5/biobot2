@@ -32,6 +32,7 @@
     "rules_reject": "Reject the rules",
     "set_bio": "Please put @{} in your Telegram bio and select a button",
     "set_username": "Please set a username on your Telegram account - https://telegram.org/faq#q-what-are-usernames-how-do-i-get-one",
+    "start_bot": "Sorry, I can't help you join the chain until you've sent me a message first. Please send me a message before clicking continue.",
     "start_help": "You have to read the <a href='https://t.me/{}'>rules</a> and click on 'Accept the rules'",
     "untrusted_forbidden": "<code>You cannot load untrusted trees for security reasons.</code>",
     "username_help": "You need to set a username (handle) on Telegram. It can be whatever you want. See @username and https://telegram.org/faq#q-what-are-usernames-how-do-i-get-one for help getting one. Once you've set it, click 'Continue'",
