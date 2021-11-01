@@ -315,6 +315,10 @@ class BioBot:
         if not input_entity:
             # testmode support
             await event.answer(await tr(event, "start_bot"), alert=True)
+            await message.edit(await tr(event, "please_click"),
+                               buttons=[[Button.inline(await tr(event, "continue"), event.data)],
+                                        [Button.inline(await tr(event, "cancel"), b"c" + event.data[1:9])],
+                                        [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:9] + b"s")]])
             return
         entity = await self.client.get_entity(input_entity)  # To prevent caching
         if entity.username and entity.username.lower() in (name.lower() for name in chain):
