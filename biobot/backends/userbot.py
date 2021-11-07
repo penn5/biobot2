@@ -44,11 +44,11 @@ class UserbotBackend(backends.Backend):
         if not self.auth_key:
             print(f"Signing in for {self.phone}")
         try:
-            await self.client.start(self.phone, code_callback=self.login_code and (lambda: self.login_code))
+            await self.client.start(self.phone, code_callback=self.login_code and (lambda: self.login_code) or (lambda: input(f"Enter login the code you received on {self.phone}: ")))
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             print(f"Unable to sign in to {self.phone}")
             raise
-        if not self.auth_key:
+        if not self.auth_key and not self.login_code:
             self.auth_key = telethon.sessions.StringSession.save(self.client.session)
             print(f"Please put '{self.auth_key}' as the auth_key for {self.phone} in the config.json")
         async for dialog in self.client.iter_dialogs():
