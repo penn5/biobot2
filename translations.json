@@ -14,6 +14,7 @@
     "diff_parents_delim": " + ",
     "diff_username_delim": " \u21d2 ",
     "fatal_error": "A fatal error occured while processing this request.",
+    "fix_anonymous": "Welcome to the Bio Chain (v2.0)! The bot detected that you're an anonymous user. To join the chain, you need to reveal your identity. Once you've done that, simply send /start so we know who you are.",
     "forbidden": "You cannot use that command here.",
     "get_help": "Get more help",
     "invalid_id": "<code>Invalid ID</code>",

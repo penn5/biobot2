@@ -260,8 +260,13 @@ class BioBot:
         if isinstance(event, telethon.events.ChatAction.Event) and (event.user_joined or event.user_added):
             cb = event.user_id
         if isinstance(event, telethon.events.NewMessage.Event):
-            cb = event.sender_id
-        if cb is not None:
+            if isinstance(event.from_id, telethon.tl.types.PeerUser):
+                cb = event.from_id.user_id
+            else:
+                cb = None
+        if cb is None:
+            await event.reply(await tr(event, "fix_anonymous"))
+        else:
             cb = cb.to_bytes(8, "big")
             await event.reply(await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
@@ -269,7 +274,10 @@ class BioBot:
     @error_handler
     async def user_joined_main(self, event):
         if event.user_joined or event.user_added:
-            await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(event.chat_id))
+            links = await self.client(telethon.tl.functions.messages.GetExportedChatInvitesRequest(event.input_chat, telethon.tl.types.InputUserEmpty(), limit=100, revoked=False))
+            for link in links.invites:
+                await self.client(telethon.tl.functions.messages.EditExportedChatInviteRequest(event.input_chat, link.link, revoked=True))
+                await self.client(telethon.tl.functions.messages.DeleteExportedChatInviteRequest(link.link))
             await self.chain_command(event)
 
     @error_handler
