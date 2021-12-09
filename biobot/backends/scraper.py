@@ -40,5 +40,6 @@ class ScraperBackend(backends.Backend):
         return [x[1:] for x in ret]
 
     async def close(self):
-        await self.session.close()
-        del self.session
+        if self.session is not None:
+            await self.session.close()
+            self.session = None

@@ -65,6 +65,10 @@ class UserbotBackend(backends.Backend):
                 ret[(user.id, user.username)] = {"deleted": user.deleted, "access_hash": user.access_hash}
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
+        except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
+            raise backends.Broken("User deactivated")
+        except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
+            raise backends.Broken("Auth key duplicated")
         return ret
 
     async def get_bio_links(self, uid, username):
@@ -72,6 +76,10 @@ class UserbotBackend(backends.Backend):
             full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
+        except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
+            raise backends.Broken("User deactivated")
+        except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
+            raise backends.Broken("Auth key duplicated")
         except ValueError:
             members = await self.get_joined_users()
             try:
@@ -87,4 +95,6 @@ class UserbotBackend(backends.Backend):
         return [x.group()[1:] for x in USERNAME_REGEX.finditer(full.about)]
 
     async def close(self):
-        await self.client.disconnect()
+        if self.client is not None:
+            await self.client.disconnect()
+            self.client = None

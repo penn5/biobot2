@@ -36,10 +36,14 @@ class Backend:
         """Return an iterable of usernames present in the bio, excluding the @"""
 
     async def close(self):
-        """Prepare for destruction"""
+        """Prepare for destruction, this may be called multiple times"""
 
 
 class Unavailable(RuntimeError):
     def __init__(self, message, seconds=0):
         super().__init__(message)
         self.seconds = seconds
+
+
+class Broken(RuntimeError):
+    pass

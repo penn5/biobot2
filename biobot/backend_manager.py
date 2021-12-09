@@ -15,9 +15,10 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from . import backends
-from .backend import Unavailable
+from .backend import Unavailable, Broken
 import logging
 import asyncio
+import itertools
 
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class Backends:
     _operations = [lambda x: x.get_joined_users, lambda x: x.get_bio_links]
 
     def __init__(self, config, bot):
+        self._dead = False
         self._config = config
         self._bot = bot
         self._backends = []
@@ -43,27 +45,48 @@ class Backends:
         for module, config in backend_config.items():
             backend = getattr(backends, module)
             self._backends += backend.get_instances(self._bot, common_config, config)
-        self.round_robin = {k: self._backends.copy() for k in self._operations}
         # Initialise synchronously to make authentication easier
-        for backend in self._backends:
+        for i, backend in enumerate(self._backends):
             await backend.init()
+            self._tasks.append([])
             for operation in range(len(self._operations)):
-                self._tasks.append(asyncio.create_task(self._act(operation, backend)))
+                self._tasks[i].append(asyncio.create_task(self._act(operation, backend, i)))
 
     async def __aenter__(self):
         await self.init()
         return self
 
     async def close(self):
-        del self._config
-        del self.round_robin
+        if self._dead:
+            return
+        self._dead = True
+        self._config = None
         await asyncio.gather(*[backend.close() for backend in self._backends])
-        del self._backends
+        self._backends = None
+        for task in itertools.chain.from_iterable(self._tasks):
+            task.cancel()
+        for task in itertools.chain.from_iterable(self._tasks):
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except BaseException as e:
+                logging.error("Failed to cancel %r", task)
+        self._tasks.clear()
+        for queue in self._queues:
+            while True:
+                try:
+                    _, _, fut = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                fut.set_exception(RuntimeError("Shutting down"))
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.close()
 
     async def _do(self, operation, *args, **kwargs):
+        if self._dead:
+            raise RuntimeError("No serviceable backends available!")
         return await (await self._put_queue(operation, args, kwargs))
 
     def get_joined_users(self):
@@ -81,7 +104,7 @@ class Backends:
         await self._queues[operation].put((args, kwargs, fut))
         return fut
 
-    async def _act(self, operation, backend):
+    async def _act(self, operation, backend, backend_id):
         op = self._operations[operation](backend)
         while True:
             args, kwargs, fut = await self._get_queue(operation)
@@ -91,6 +114,16 @@ class Backends:
                 if isinstance(e, Unavailable):
                     await self._put_queue(operation, args, kwargs, fut)
                     await asyncio.sleep(e.seconds)
+                elif isinstance(e, Broken):
+                    logging.exception("Backend %r broken on %d (%r, %r) for %r", backend, operation, args, kwargs, fut)
+                    await self._put_queue(operation, args, kwargs, fut)
+                    self._tasks[backend_id].clear()
+                    if all(not task for task in self._tasks):
+                        logging.critical("No more backends serviceable!")
+                        await self.close()
+                    else:
+                        await asyncio.shield(backend.close())
+                    return  # give up.
                 else:
                     fut.set_exception(e)
                     if isinstance(e, asyncio.CancelledError):

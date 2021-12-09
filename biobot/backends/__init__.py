@@ -14,7 +14,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from ..backend import Backend, Unavailable
+from ..backend import Backend, Unavailable, Broken
 from .userbot import UserbotBackend
 from .scraper import ScraperBackend
 from .bot import BotBackend
