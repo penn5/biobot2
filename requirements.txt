@@ -1,7 +1,7 @@
-telethon
+https://github.com/LonamiWebs/Telethon/archive/1d4bd39307a82f2ebf98b8b52dbb59ddd37877d3.zip
 aiohttp
 lxml
-git+https://github.com/penn5/python-poeditor
+https://github.com/penn5/python-poeditor/archive/refs/heads/master.zip
 matplotlib
 networkx
 scipy

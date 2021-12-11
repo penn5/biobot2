@@ -15,6 +15,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from . import userbot
+from .. import utils
 
 import telethon
 
@@ -23,7 +24,7 @@ class BotBackend(userbot.UserbotBackend):
     def __init__(self, bot, group_id, api_id, api_hash):
         self.token = bot if isinstance(bot, str) else None
         self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash) if isinstance(bot, str) else bot
-        self.group = group_id
+        self.group = utils.config_to_peer(group_id) if isinstance(group_id, dict) else group_id
 
     @classmethod
     def get_instances(cls, bot, common_config, configs):

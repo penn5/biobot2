@@ -16,10 +16,13 @@
 
 import functools
 import telethon
+import telethon.sessions
+import telethon._misc.utils
 import io
 import re
-from telethon.tl.custom.button import Button
+from telethon.types import Button
 from . import core
+from .utils import config_to_peer
 from .translations import tr
 from .backends.bot import BotBackend
 import logging
@@ -40,7 +43,7 @@ def error_handler(func):
         try:
             return await func(self, event)
         except Exception:
-            await event.reply(await tr(event, "fatal_error"))
+            await event.reply(html=await tr(event, "fatal_error"))
             raise
     return wrapper
 
@@ -48,11 +51,11 @@ def error_handler(func):
 def protected(func):
     @functools.wraps(func)
     async def wrapper(self, event):
-        if event.chat_id != self.main_group and \
-                event.chat_id != self.bot_group and \
-                event.chat_id not in self.extra_groups and \
-                event.sender_id not in self.sudo_users:
-            await event.reply(await tr(event, "forbidden"))
+        if telethon._misc.utils.get_peer(event.peer_id) != self.main_group and \
+                telethon._misc.utils.get_peer(event.peer_id) != self.bot_group and \
+                telethon._misc.utils.get_peer(event.peer_id) not in self.extra_groups and \
+                telethon._misc.utils.get_peer(event.from_id) not in self.sudo_users:
+            await event.reply(html=await tr(event, "forbidden"))
         else:
             return await func(self, event)
     return wrapper
@@ -84,11 +87,15 @@ class BioBot:
     def __init__(self, api_id, api_hash, bot_token, main_group,
                  admissions_group, bot_group, data_group, rules_username, extra_groups=[], sudo_users=[],
                  test_dc=0):
-        self.bot_token, self.main_group, self.admissions_group = bot_token, main_group, admissions_group
-        self.bot_group, self.data_group, self.rules_username = bot_group, data_group, rules_username
-        self.extra_groups, self.sudo_users = extra_groups, sudo_users
+        self.bot_token = bot_token
+        self.main_group = config_to_peer(main_group)
+        self.admissions_group = config_to_peer(admissions_group)
+        self.bot_group = config_to_peer(bot_group)
+        self.data_group = config_to_peer(data_group)
+        self.rules_username = rules_username
+        self.extra_groups = [config_to_peer(extra_group) for extra_group in extra_groups]
+        self.sudo_users = [config_to_peer(sudo_user) for sudo_user in sudo_users]
         self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash)
-        self.client.parse_mode = "html"
         if test_dc:
             self.client.session.set_dc(test_dc, "149.154.167.40", 80)
 
@@ -146,13 +153,13 @@ class BioBot:
 
     @error_handler
     async def ping_command(self, event):
-        await event.reply(await tr(event, "pong"))
+        await event.reply(html=await tr(event, "pong"))
 
     @error_handler
     @protected
     async def chain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, chain = await core.get_chain(self.target, await self._select_backend(event, error=new))
+        new = await event.reply(html=await tr(event, "please_wait"))
+        graph, chain = await core.get_chain(self.target, await self._select_backend(event, error=event))
         data = await self._store_data(graph)
         await send(new, (await tr(event, "chain_format")).format(len(chain), data,
                                                                  (await tr(event, "chain_delim")).join(user
@@ -162,16 +169,16 @@ class BioBot:
     @error_handler
     @protected
     async def notinchain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, antichain = await core.get_notinchain(self.target, await self._select_backend(event, error=new))
+        new = await event.reply(html=await tr(event, "please_wait"))
+        graph, antichain = await core.get_notinchain(self.target, await self._select_backend(event, error=event))
         data = await self._store_data(graph)
         await send(new, data + "\n" + "\n".join(user for user in await _format_user((user for user in antichain if graph.nodes[user]["uid"] is not None and not graph.nodes[user]["deleted"]), graph, True)))
 
     @error_handler
     @protected
     async def allchains_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, chains = await core.get_chains(await self._select_backend(event, error=new))
+        new = await event.reply(html=await tr(event, "please_wait"))
+        graph, chains = await core.get_chains(await self._select_backend(event, error=event))
         data = await self._store_data(graph)
         out = [" ⇒ ".join(await _format_user(chain, graph, False)) for chain in chains if len(chain) > 1 or graph.nodes[chain[0]]["uid"] is not None]
         await send(new, data + " " + "\n\n".join(out))
@@ -179,16 +186,16 @@ class BioBot:
     @error_handler
     @protected
     async def fetchdata_command(self, event):
-        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
+        await event.reply(html=(await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
 
     @error_handler
     @protected
     async def diff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        backend = await self._select_backend(event, default_backend=False, error=new)
+        new = await event.reply(html=await tr(event, "please_wait"))
+        backend = await self._select_backend(event, default_backend=False, error=event)
         if not backend:
             return
-        graph, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=new), await tr(event, "diff_username_delim"), "\n")
+        graph, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=event), await tr(event, "diff_username_delim"), "\n")
         data = await self._store_data(graph)
         old_only_edges, new_only_edges, uid_edges, username_edges, old_only_names, new_only_names = diff
         await send(new, (await tr(event, "diff_format")).format(data, new_only_names, old_only_names, username_edges,
@@ -197,11 +204,11 @@ class BioBot:
     @error_handler
     @protected
     async def gdiff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        backend = await self._select_backend(event, default_backend=False, error=new)
+        new = await event.reply(html=await tr(event, "please_wait"))
+        backend = await self._select_backend(event, default_backend=False, error=event)
         if not backend:
             return
-        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new), self.target)
+        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=event), self.target)
         await self._store_data(graph)
         await event.reply(file=diff, force_document=True)
         await new.delete()
@@ -209,8 +216,8 @@ class BioBot:
     @error_handler
     @protected
     async def link_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        data = await self._select_backend(event, error=new)
+        new = await event.reply(html=await tr(event, "please_wait"))
+        data = await self._select_backend(event, error=event)
         graph = await core.get_bios(data)
         name = event.pattern_match[2]
         try:
@@ -229,7 +236,7 @@ class BioBot:
 
     @error_handler
     async def start_command(self, event):
-        if event.chat_id == self.admissions_group:
+        if telethon._misc.utils.get_peer(event.peer_id) == self.admissions_group:
             return await self.user_joined_admission(event)
         if not event.is_private:
             return
@@ -237,22 +244,22 @@ class BioBot:
         if msg:
             if msg.startswith("invt"):
                 unescaped = base64.urlsafe_b64decode(msg[12:].encode("utf-8")).decode("utf-8")
-                await event.respond((await tr(event, "invite_format")).format(unescaped), link_preview=False)
+                await event.respond(html=(await tr(event, "invite_format")).format(unescaped), link_preview=False)
                 await self.client.delete_messages(self.admissions_entity.id, int(msg[4:12], 16))
                 return
             if msg.startswith("help"):
                 buttons = [Button.url(await tr(event, "return_to_group"),
                                       "https://t.me/c/{}/{}".format(self.admissions_entity.id, int(msg[5:13], 16)))]
                 if msg[4] == "s":
-                    await event.respond((await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
+                    await event.respond(html=(await tr(event, "start_help")).format(self.rules_username), buttons=buttons)
                     return
                 if msg[4] == "j":
-                    await event.respond((await tr(event, "join_help")).format(msg[13:]), buttons=buttons)
+                    await event.respond(html=(await tr(event, "join_help")).format(msg[13:]), buttons=buttons)
                     return
                 if msg[4] == "u":
-                    await event.respond(await tr(event, "username_help"), buttons=buttons)
+                    await event.respond(html=await tr(event, "username_help"), buttons=buttons)
                     return
-        await event.respond((await tr(event, "pm_start")).format(self.target))
+        await event.respond(html=(await tr(event, "pm_start")).format(self.target))
 
     @error_handler
     async def user_joined_admission(self, event):
@@ -265,10 +272,10 @@ class BioBot:
             else:
                 cb = None
         if cb is None:
-            await event.reply(await tr(event, "fix_anonymous"))
+            await event.reply(html=await tr(event, "fix_anonymous"))
         else:
             cb = cb.to_bytes(8, "big")
-            await event.reply(await tr(event, "welcome_admission"),
+            await event.reply(html=await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
 
     @error_handler
@@ -279,7 +286,7 @@ class BioBot:
     @error_handler
     async def callback_query(self, event):
         for_user = int.from_bytes(event.data[1:9], "big")
-        if for_user != event.sender_id:
+        if telethon._tl.PeerUser(for_user) != event.from_id:
             await event.answer(await tr(event, "click_forbidden"))
             return
         message = await event.get_message()
@@ -298,7 +305,7 @@ class BioBot:
 
     async def callback_query_start(self, event, message):
         try:
-            await message.edit(await tr(event, "please_click"),
+            await message.edit(html=await tr(event, "please_click"),
                                buttons=[[Button.url(await tr(event, "rules_link"), "https://t.me/" + self.rules_username)],
                                         [Button.inline(await tr(event, "rules_accept"), b"j" + event.data[1:9])],
                                         [Button.inline(await tr(event, "rules_reject"), b"c" + event.data[1:9])],
@@ -310,7 +317,7 @@ class BioBot:
 
     async def callback_query_join(self, event, message):
         try:
-            await message.edit(await tr(event, "loading_1m"), buttons=None)
+            await message.edit(html=await tr(event, "loading_1m"), buttons=None)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             await event.answer(await tr(event, "button_loading"))
             return
@@ -319,7 +326,7 @@ class BioBot:
         if not input_entity:
             # testmode support
             await event.answer(await tr(event, "start_bot"), alert=True)
-            await message.edit(await tr(event, "please_click"),
+            await message.edit(html=await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), event.data)],
                                         [Button.inline(await tr(event, "cancel"), b"c" + event.data[1:9])],
                                         [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:9] + b"s")]])
@@ -327,7 +334,7 @@ class BioBot:
         entity = await self.client.get_entity(input_entity)  # To prevent caching
         if entity.username and entity.username.lower() in (name.lower() for name in chain):
             await event.answer(await tr(event, "already_in_chain"), alert=True)
-            await message.edit(await tr(event, "already_in_chain"), buttons=None)
+            await message.edit(html=await tr(event, "already_in_chain"), buttons=None)
             return
         await self.callback_query_done(event, message, b"d" + event.data[1:9] + int(time.time()).to_bytes(8, "big") + next(filter(lambda name: isinstance(name, str), chain)).encode("ascii"))
 
@@ -342,7 +349,7 @@ class BioBot:
                 await self.callback_query_join(event, message)
                 return
             try:
-                await message.edit(await tr(event, "verifying_10s"), buttons=None)
+                await message.edit(html=await tr(event, "verifying_10s"), buttons=None)
             except telethon.errors.rpcerrorlist.MessageNotModifiedError:
                 await event.answer(await tr(event, "button_loading"))
                 return
@@ -354,7 +361,7 @@ class BioBot:
             entity = await self.client.get_entity(input_entity)  # To prevent caching
             bio = [username.casefold() for username in await self.bot_backend.get_bio_links(entity.id, entity.username)]
         if skip or data[17:].decode("ascii").casefold() not in bio:
-            await message.edit(await tr(event, "please_click"),
+            await message.edit(html=await tr(event, "please_click"),
                                buttons=[[Button.inline(await tr(event, "continue"), data)],
                                         [Button.inline(await tr(event, "cancel"), b"c" + data[1:9])],
                                         [Button.inline(await tr(event, "get_help"),
@@ -370,19 +377,19 @@ class BioBot:
                 await event.answer(await tr(message, "set_username"), alert=True)
             except telethon.errors.rpcerrorlist.QueryIdInvalidError:
                 pass
-            await message.edit(await tr(message, "please_click"),
+            await message.edit(html=await tr(message, "please_click"),
                                buttons=[[Button.inline(await tr(message, "continue"), data)],
                                         [Button.inline(await tr(message, "cancel"), b"c" + data[1:9])],
                                         [Button.inline(await tr(message, "get_help"),
                                                        b"h" + data[1:9] + b"u")]])
             return
-        invite = await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(self.main_group, expire_date=datetime.timedelta(hours=1), usage_limit=1))
+        invite = await self.client(telethon._tl.fn.messages.ExportChatInvite(self.main_group, expire_date=datetime.timedelta(hours=1), usage_limit=1))
         escaped = base64.urlsafe_b64encode(invite.link.removeprefix("https://").encode("utf-8")).decode("utf-8")
         try:
             await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
         except telethon.errors.rpcerrorlist.QueryIdInvalidError:
             pass
-        await message.edit(await tr(message, "please_click"),
+        await message.edit(html=await tr(message, "please_click"),
                            buttons=[[Button.inline(await tr(message, "continue"), data)],
                                     [Button.inline(await tr(message, "cancel"), b"c" + data[1:9])],
                                     [Button.inline(await tr(message, "get_help"),
@@ -413,7 +420,7 @@ class BioBot:
         if data_id is None and getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) in FILE_NAMES:
-                if event.from_id.user_id in self.sudo_users:
+                if event.from_id.user_id in self.sudo_users:  #  TODO STOPSHIP Audit
                     return (await reply.download_media(bytes), reply.file.name)
                 else:
                     await send(error, await tr(error, "untrusted_forbidden"))
@@ -433,7 +440,7 @@ class BioBot:
 
     async def _fetch_data(self, data_id):
         ret = await self.client.get_messages(self.data_group, ids=data_id)
-        if getattr(getattr(ret, "file", None), "name", None) not in FILE_NAMES:
+        if ret is None or ret.file is None or ret.file.name not in FILE_NAMES:
             return None
         return ret
 
@@ -490,23 +497,23 @@ def _move_entities(text, entities, move=0):
             length = entity.offset
             break
         current_entities.append(entity)
-    current_text = telethon.extensions.html.unparse(text[:length], current_entities)
+    current_text = telethon._misc.html.unparse(text[:length], current_entities)
     text = text[length:]
     return current_text, text, entities, length
 
 
 async def send(message, text, **kwargs):
-    text, entities = telethon.extensions.html.parse(text)
+    text, entities = telethon._misc.html.parse(text)
     entities.sort(key=lambda e: e.offset)
+    current_text, text, entities, length = _move_entities(text, entities)
     if message.out:
-        current_text, text, entities, length = _move_entities(text, entities)
         try:
-            await message.edit(current_text, **kwargs)
-        except telethon.errors.rpcerrorlist.MessageNotModifiedError:
+            await message.edit(html=current_text, **kwargs)
+        except telethon.errors.MessageNotModifiedError:
             pass
-        current_text, text, entities, length = _move_entities(text, entities, length)
     else:
-        message = await message.reply("…", silent=True)
+        message = await message.reply(html=current_text, silent=True)
+    current_text, text, entities, length = _move_entities(text, entities, length)
     while current_text:
-        await (await message.reply("…", silent=True)).edit(current_text, **kwargs)
+        await (await message.reply("…", silent=True)).edit(html=current_text, **kwargs)
         current_text, text, entities, length = _move_entities(text, entities, length)
