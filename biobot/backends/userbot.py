@@ -33,7 +33,7 @@ class UserbotBackend(backends.Backend):
             self.login_code = str(test_dc) * 5
         else:
             self.login_code = None
-        self.client = telethon.TelegramClient(session, api_id, api_hash)
+        self.client = telethon.TelegramClient(session, api_id, api_hash, connection_retries=None)
 
     @classmethod
     def get_instances(cls, bot, common_config, configs):

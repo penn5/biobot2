@@ -30,6 +30,7 @@ OP_BIO = 1
 
 class Backends:
     _operations = [lambda x: x.get_joined_users, lambda x: x.get_bio_links]
+    request_timeout = 10.0
 
     def __init__(self, config, bot):
         self._dead = False
@@ -109,9 +110,11 @@ class Backends:
         while True:
             args, kwargs, fut = await self._get_queue(operation)
             try:
-                ret = await op(*args, **kwargs)
+                ret = await asyncio.wait_for(op(*args, **kwargs), timeout=self.request_timeout)
             except BaseException as e:
-                if isinstance(e, Unavailable):
+                if isinstance(e, Unavailable) or isinstance(e, asyncio.TimeoutError):
+                    if isinstance(e, asyncio.TimeoutError):
+                        logging.warning("Backend %r timed out on %d (%r, %r) for %r", backend, operation, args, kwargs, fut)
                     await self._put_queue(operation, args, kwargs, fut)
                     await asyncio.sleep(e.seconds)
                 elif isinstance(e, Broken):
