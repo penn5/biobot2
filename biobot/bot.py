@@ -274,10 +274,6 @@ class BioBot:
     @error_handler
     async def user_joined_main(self, event):
         if event.user_joined or event.user_added:
-            links = await self.client(telethon.tl.functions.messages.GetExportedChatInvitesRequest(event.input_chat, telethon.tl.types.InputUserEmpty(), limit=100, revoked=False))
-            for link in links.invites:
-                await self.client(telethon.tl.functions.messages.EditExportedChatInviteRequest(event.input_chat, link.link, revoked=True))
-                await self.client(telethon.tl.functions.messages.DeleteExportedChatInviteRequest(link.link))
             await self.chain_command(event)
 
     @error_handler
