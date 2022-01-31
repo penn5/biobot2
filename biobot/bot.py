@@ -51,10 +51,11 @@ def error_handler(func):
 def protected(func):
     @functools.wraps(func)
     async def wrapper(self, event):
+        print(event.sender)
         if telethon._misc.utils.get_peer(event.peer_id) != self.main_group and \
                 telethon._misc.utils.get_peer(event.peer_id) != self.bot_group and \
                 telethon._misc.utils.get_peer(event.peer_id) not in self.extra_groups and \
-                telethon._misc.utils.get_peer(event.from_id) not in self.sudo_users:
+                telethon._misc.utils.get_peer(event.sender_id) not in self.sudo_users:
             await event.reply(html=await tr(event, "forbidden"))
         else:
             return await func(self, event)
@@ -95,9 +96,10 @@ class BioBot:
         self.rules_username = rules_username
         self.extra_groups = [config_to_peer(extra_group) for extra_group in extra_groups]
         self.sudo_users = [config_to_peer(sudo_user) for sudo_user in sudo_users]
-        self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash)
         if test_dc:
-            self.client.session.set_dc(test_dc, "149.154.167.40", 80)
+            self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash, use_ipv6=False, default_dc_id=2, default_ipv4_ip="149.154.167.40", default_port=80)
+        else:
+            self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash)
 
     async def init(self):
         await self.client.start(bot_token=self.bot_token)

@@ -29,11 +29,11 @@ class UserbotBackend(backends.Backend):
         self.auth_key = auth_key
         session = telethon.sessions.MemorySession() if not auth_key else telethon.sessions.StringSession(auth_key)
         if test_dc:
-            session.set_dc(test_dc, "149.154.167.40", 80)
             self.login_code = str(test_dc) * 5
+            self.client = telethon.TelegramClient(session, api_id, api_hash, connection_retries=None, use_ipv6=False, default_dc_id=2, default_ipv4_ip="149.154.167.40", default_port=80)
         else:
             self.login_code = None
-        self.client = telethon.TelegramClient(session, api_id, api_hash, connection_retries=None)
+            self.client = telethon.TelegramClient(session, api_id, api_hash, connection_retries=None)
 
     @classmethod
     def get_instances(cls, bot, common_config, configs):
@@ -52,7 +52,7 @@ class UserbotBackend(backends.Backend):
             self.auth_key = telethon.sessions.StringSession.save(self.client.session)
             print(f"Please put '{self.auth_key}' as the auth_key for {self.phone} in the config.json")
         async for dialog in self.client.get_dialogs():
-            if dialog.id == self.group_id:
+            if telethon._misc.utils.get_peer(dialog.entity) == self.group_id:
                 self.group = dialog.entity
                 break
         assert isinstance(self.group, telethon._tl.Channel)
@@ -79,7 +79,7 @@ class UserbotBackend(backends.Backend):
         try:
             full = await self.client(telethon._tl.fn.users.GetFullUser(user))
         except telethon.errors.FloodWaitError as e:
-            raise backends.Unavailable("Flood Wait", e.seconds)
+            raise backends.Unavailable("Flood Wait", e.seconds or 1)
         except telethon.errors.UserDeactivatedBanError:
             raise backends.Broken("User deactivated")
         except telethon.errors.AuthKeyDuplicatedError:
