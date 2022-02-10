@@ -54,7 +54,7 @@ def _graph_to_dict(data):
         node = data.nodes[name]
         uid = node["uid"]
         username = node["username"] and node["username"].casefold()
-        ret[(uid, username)] = [child.casefold() for child in children]
+        ret[(uid, username)] = [child.casefold() for child in children if child != username]
         names[(uid, username)] = name
     return ret, names
 
