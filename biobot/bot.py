@@ -269,7 +269,7 @@ class BioBot:
         if isinstance(event, telethon.events.ChatAction.Event) and (event.user_joined or event.user_added):
             cb = event.user_id
         if isinstance(event, telethon.events.NewMessage.Event):
-            if isinstance(event.from_id, telethon.tl.types.PeerUser):
+            if isinstance(event.from_id, telethon._tl.PeerUser):
                 cb = event.from_id.user_id
             else:
                 cb = None
@@ -452,10 +452,10 @@ class BioBot:
         for node, data in graph.nodes.items():
             if data["uid"] and not data.get("access_hash", None):
                 try:
-                    entity = await self.client.get_input_entity(telethon.tl.types.PeerUser(data["uid"]))
+                    entity = await self.client.get_input_entity(telethon._tl.PeerUser(data["uid"]))
                 except (ValueError, TypeError):
                     entity = None
-                if isinstance(entity, telethon.tl.types.InputPeerUser):
+                if isinstance(entity, telethon._tl.InputPeerUser):
                     data["access_hash"] = entity.access_hash
         data = io.BytesIO()
         data.name = "chain.gml"
