@@ -34,7 +34,8 @@ import datetime
 logger = logging.getLogger(__name__)
 
 
-FILE_NAMES = set(("chain.gml", "raw_chain.forest"))
+FILE_NAMES = {"chain.gml", "raw_chain.forest"}
+ALLOWED_FORMATS = {"svg", "svgz", "pdf"}
 
 
 def error_handler(func):
@@ -135,7 +136,7 @@ class BioBot:
         self.client.add_event_handler(self.diff_command,
                                       telethon.events.NewMessage(pattern=fr"{start}tdiff{eoc}(?:{data}(?: {data})?)?"))
         self.client.add_event_handler(self.gdiff_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}gdiff{eoc}(?:{data}(?: {data})?)?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}gdiff{eoc}(?:{data}(?: {data})?)?(?: \.(\w+))?"))
         self.client.add_event_handler(self.link_command,
                                       telethon.events.NewMessage(pattern=fr"{start}(?:perma)?link{eoc}(?:{data} )?{username}"))
         self.client.add_event_handler(self.start_command,
@@ -210,7 +211,10 @@ class BioBot:
         backend = await self._select_backend(event, default_backend=False, error=event)
         if not backend:
             return
-        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=event), self.target)
+        format = event.pattern_match[3]
+        if format not in ALLOWED_FORMATS:
+            format = "svgz"
+        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=event), self.target, format)
         await self._store_data(graph)
         await event.reply(file=diff, force_document=True)
         await new.delete()

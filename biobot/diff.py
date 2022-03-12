@@ -151,7 +151,7 @@ def textual_chain_diff(old_data, new_data, directed_delim, line_delim):
     return old_only_edges, new_only_edges, uid_edges, username_edges, old_only_names, new_only_names
 
 
-def draw_chain_diff(old_data, new_data, target):
+def draw_chain_diff(old_data, new_data, target, format, extension=None):
     graph, common_edges, old_only_edges, new_only_edges, uid_edges, username_edges, common_names, old_only_names, new_only_names, old_names, new_names = _generate_diff_graph(old_data, new_data, _default_namer, False)
 
     fig = plt.figure(figsize=(200, 124))
@@ -204,7 +204,7 @@ def draw_chain_diff(old_data, new_data, target):
     nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=username_edges, width=2, alpha=0.5, edge_color="tab:pink")
     nx.draw_networkx_labels(graph, pos, ax=ax, font_size=5)
     data = io.BytesIO()
-    data.name = "chain.svgz"
-    fig.savefig(data, dpi=120, bbox_inches="tight", format="svgz")
+    data.name = "chain." + (extension or format)
+    fig.savefig(data, dpi=120, bbox_inches="tight", format=format)
     data.seek(0)
     return data
