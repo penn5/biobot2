@@ -249,7 +249,8 @@ class BioBot:
         msg = event.pattern_match[1]
         if msg:
             if msg.startswith("invt"):
-                unescaped = base64.urlsafe_b64decode(msg[12:].encode("utf-8")).decode("utf-8")
+                encoded = msg[12:] + "=" * (-len(msg) % 4)
+                unescaped = base64.urlsafe_b64decode(encoded.encode("utf-8")).decode("utf-8")
                 await event.respond(html=(await tr(event, "invite_format")).format(unescaped), link_preview=False)
                 await self.client.delete_messages(self.admissions_entity.id, int(msg[4:12], 16))
                 return
@@ -390,8 +391,9 @@ class BioBot:
                                                        b"h" + data[1:9] + b"u")]])
             return
         invite = await self.client(telethon._tl.fn.messages.ExportChatInvite(self.main_group, expire_date=datetime.timedelta(hours=1), usage_limit=1))
-        escaped = base64.urlsafe_b64encode(invite.link.removeprefix("https://").encode("utf-8")).decode("utf-8")
+        escaped = base64.urlsafe_b64encode(invite.link.removeprefix("https://").encode("utf-8")).decode("utf-8").replace("=", "")
         try:
+            print("t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
             await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
         except telethon.errors.rpcerrorlist.QueryIdInvalidError:
             pass
