@@ -204,7 +204,7 @@ def draw_chain_diff(old_data, new_data, target):
     nx.draw_networkx_edges(graph, pos, ax=ax, edgelist=username_edges, width=2, alpha=0.5, edge_color="tab:pink")
     nx.draw_networkx_labels(graph, pos, ax=ax, font_size=5)
     data = io.BytesIO()
-    data.name = "chain.svg"
-    fig.savefig(data, dpi=120, bbox_inches="tight", format="svg")
+    data.name = "chain.svgz"
+    fig.savefig(data, dpi=120, bbox_inches="tight", format="svgz")
     data.seek(0)
     return data
