@@ -413,7 +413,7 @@ class BioBot:
         if data_id is None and getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) in FILE_NAMES:
-                if event.from_id.user_id in self.sudo_users:
+                if event.sender_id in self.sudo_users:
                     return (await reply.download_media(bytes), reply.file.name)
                 else:
                     await send(error, await tr(error, "untrusted_forbidden"))
