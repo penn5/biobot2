@@ -14,10 +14,14 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from abc import abstractmethod
+from abc import abstractmethod, ABC
+import re
 
 
-class Backend:
+USERNAME_REGEX = re.compile(r'@[a-z][_0-9a-z]{4,31}', re.I)
+
+
+class Backend(ABC):
     @classmethod
     @abstractmethod
     def get_instances(cls, common_config, configs):
@@ -26,17 +30,30 @@ class Backend:
     async def init(self):
         """Initialise the class"""
 
+    async def close(self):
+        """Prepare for destruction, this may be called multiple times"""
+
+
+class JoinedUsersGetterBackend(Backend):
     @abstractmethod
     async def get_joined_users(self):
         """Fetch the users in the group, returning an iterable"""
-        raise Unavailable("Not implemented.")
 
+
+class BioLinksGetterBackend(Backend):
     @abstractmethod
     async def get_bio_links(self, uid, username):
         """Return an iterable of usernames present in the bio, excluding the @"""
 
-    async def close(self):
-        """Prepare for destruction, this may be called multiple times"""
+class BioTextGetterBackend(BioLinksGetterBackend):
+    @abstractmethod
+    async def get_bio_text(self, uid, username):
+        """Return the user's bio text"""
+
+    async def get_bio_links(self, uid, username):
+        """Return an iterable of usernames present in the bio, excluding the @"""
+        return [x.group()[1:] for x in USERNAME_REGEX.finditer(await self.get_bio_text(uid, username))]
+
 
 
 class Unavailable(RuntimeError):

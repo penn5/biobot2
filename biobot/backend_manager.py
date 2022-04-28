@@ -15,7 +15,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from . import backends
-from .backend import Unavailable, Broken
+from .backend import Unavailable, Broken, JoinedUsersGetterBackend, BioLinksGetterBackend
 import logging
 import asyncio
 import itertools
@@ -29,7 +29,10 @@ OP_BIO = 1
 
 
 class Backends:
-    _operations = [lambda x: x.get_joined_users, lambda x: x.get_bio_links]
+    _operations = (
+        (lambda x: x.get_joined_users, JoinedUsersGetterBackend),
+        (lambda x: x.get_bio_links, BioLinksGetterBackend),
+    )
     request_timeout = 10.0
 
     def __init__(self, config, bot):
@@ -47,11 +50,12 @@ class Backends:
             backend = getattr(backends, module)
             self._backends += backend.get_instances(self._bot, common_config, config)
         # Initialise synchronously to make authentication easier
-        for i, backend in enumerate(self._backends):
+        for backend_i, backend in enumerate(self._backends):
             await backend.init()
             self._tasks.append([])
-            for operation in range(len(self._operations)):
-                self._tasks[i].append(asyncio.create_task(self._act(operation, backend, i)))
+            for operation_i, (operation, test_class) in enumerate(self._operations):
+                if isinstance(backend, test_class):
+                    self._tasks[backend_i].append(asyncio.create_task(self._act(operation, operation_i, backend, backend_i)))
 
     async def __aenter__(self):
         await self.init()
@@ -105,21 +109,21 @@ class Backends:
         await self._queues[operation].put((args, kwargs, fut))
         return fut
 
-    async def _act(self, operation, backend, backend_id):
-        op = self._operations[operation](backend)
+    async def _act(self, operation, operation_i, backend, backend_id):
+        op = operation(backend)
         while True:
-            args, kwargs, fut = await self._get_queue(operation)
+            args, kwargs, fut = await self._get_queue(operation_i)
             try:
                 ret = await asyncio.wait_for(op(*args, **kwargs), timeout=self.request_timeout)
             except BaseException as e:
                 if isinstance(e, Unavailable) or isinstance(e, asyncio.TimeoutError):
                     if isinstance(e, asyncio.TimeoutError):
-                        logging.warning("Backend %r timed out on %d (%r, %r) for %r", backend, operation, args, kwargs, fut)
-                    await self._put_queue(operation, args, kwargs, fut)
+                        logging.warning("Backend %r timed out on %d (%r, %r) for %r", backend, operation_i, args, kwargs, fut)
+                    await self._put_queue(operation_i, args, kwargs, fut)
                     await asyncio.sleep(e.seconds)
                 elif isinstance(e, Broken):
-                    logging.exception("Backend %r broken on %d (%r, %r) for %r", backend, operation, args, kwargs, fut)
-                    await self._put_queue(operation, args, kwargs, fut)
+                    logging.exception("Backend %r broken on %d (%r, %r) for %r", backend, operation_i, args, kwargs, fut)
+                    await self._put_queue(operation_i, args, kwargs, fut)
                     self._tasks[backend_id].clear()
                     if all(not task for task in self._tasks):
                         logging.critical("No more backends serviceable!")

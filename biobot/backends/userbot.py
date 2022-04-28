@@ -16,13 +16,9 @@
 
 from .. import backends
 import telethon
-import re
 
 
-USERNAME_REGEX = re.compile(r'@[a-z][_0-9a-z]{4,31}', re.I)
-
-
-class UserbotBackend(backends.Backend):
+class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBackend):
     def __init__(self, phone, api_id, api_hash, group_id, auth_key=None, test_dc=0):
         self.phone = phone
         self.group_id = group_id
@@ -71,7 +67,7 @@ class UserbotBackend(backends.Backend):
             raise backends.Broken("Auth key duplicated")
         return ret
 
-    async def get_bio_links(self, uid, username):
+    async def get_bio_text(self, uid, username):
         try:
             full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
@@ -86,13 +82,11 @@ class UserbotBackend(backends.Backend):
                 user = telethon.types.InputUser(uid, members[(uid, username)]["access_hash"])
             except KeyError:
                 # either uid was already a Peer in which case we should fail to avoid infinite retries, or the user just isn't there, in which case they have effectively a blank bio
-                return []
-            return await self.get_bio_links(user, username)
+                return ""
+            return await self.get_bio_text(user, username)
         if full.user.username != username:
             raise backends.Unavailable("Usernames do not match.")
-        if not full.about:
-            return []
-        return [x.group()[1:] for x in USERNAME_REGEX.finditer(full.about)]
+        return full.about or ""
 
     async def close(self):
         if self.client is not None:

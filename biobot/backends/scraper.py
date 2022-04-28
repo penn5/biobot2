@@ -19,7 +19,7 @@ import aiohttp
 from lxml import html
 
 
-class ScraperBackend(backends.Backend):
+class ScraperBackend(backends.BioTextGetterBackend):
     def __init__(self):
         self.session = aiohttp.ClientSession(raise_for_status=True)
 
@@ -27,17 +27,19 @@ class ScraperBackend(backends.Backend):
     def get_instances(cls, bot, common_config, configs):
         return [cls()]
 
-    async def get_bio_links(self, uid, username):
+    async def get_bio_text(self, uid, username):
         if username is None:
             raise backends.Unavailable("A username is required to scrape.")
         async with self.session.get("https://t.me/" + username) as resp:
             text = await resp.text()
         tree = html.fromstring(text)
-        if tree.xpath("//div[@class='tgme_page_description']/a[@class='tgme_username_link']"):
+        if tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]/a[contains(concat(' ',normalize-space(@class),' '),' tgme_username_link ')]"):
             # This happens if the username doesnt exist, OR we"re being rate-limited.
             raise backends.Unavailable("Might be rate limited.", 0.2)
-        ret = tree.xpath("//div[@class='tgme_page_description ']/a[starts-with(@href, 'https://t.me/')]/text()")
-        return [x[1:] for x in ret]
+        ret = tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//text()", smart_strings=False) or ""
+        if isinstance(ret, list):
+            return "".join(ret)
+        return ret
 
     async def close(self):
         if self.session is not None:
