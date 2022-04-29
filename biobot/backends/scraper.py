@@ -36,10 +36,8 @@ class ScraperBackend(backends.BioTextGetterBackend):
         if tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]/a[contains(concat(' ',normalize-space(@class),' '),' tgme_username_link ')]"):
             # This happens if the username doesnt exist, OR we"re being rate-limited.
             raise backends.Unavailable("Might be rate limited.", 0.2)
-        ret = tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//text()", smart_strings=False) or ""
-        if isinstance(ret, list):
-            return "".join(ret)
-        return ret
+        desc = tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//node()", smart_strings=False)
+        return "".join((isinstance(e, str) and e) or (e.tag == "br" and "\n") or "" for e in desc)
 
     async def close(self):
         if self.session is not None:
