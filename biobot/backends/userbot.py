@@ -62,6 +62,8 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
+            raise backends.Broken("User deactivated/banned")
+        except telethon.errors.rpcerrorlist.UserDeactivatedError:
             raise backends.Broken("User deactivated")
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             raise backends.Broken("Auth key duplicated")
@@ -73,6 +75,8 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
+            raise backends.Broken("User deactivated/banned")
+        except telethon.errors.rpcerrorlist.UserDeactivatedError:
             raise backends.Broken("User deactivated")
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             raise backends.Broken("Auth key duplicated")
