@@ -307,7 +307,7 @@ class BioBot:
   "</head>"
   "<body>"
     "<pre class=\"code\">\n"
-      + "\n<br>".join(entries) +
+      + "<br>".join(entries) +
     "\n</pre>"
   "</body>"
 "</html>"
