@@ -18,10 +18,11 @@ import logging
 import asyncio
 import json
 import argparse
-from . import bot, backend_manager
+from . import bot, backend_manager, log
 
 
-logging.basicConfig(level=logging.INFO)
+log.init().setLevel(logging.INFO)
+#logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():
