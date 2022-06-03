@@ -651,7 +651,7 @@ async def send(message, text, **kwargs):
     if message.out:
         current_text, current_entities = next(messages)
         try:
-            await message.edit(current_text, entities=current_entities, **kwargs)
+            await message.edit(current_text, formatting_entities=current_entities, **kwargs)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             pass
     for current_text, current_entities in messages:
