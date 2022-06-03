@@ -16,12 +16,20 @@
 
 from abc import abstractmethod, ABC
 import re
+import logging
 
 
 USERNAME_REGEX = re.compile(r'@[a-z][_0-9a-z]{4,31}', re.I)
+logger = logging.getLogger(__name__)
 
 
 class Backend(ABC):
+    def _setup_logging(self, name=None):
+        full_name = type(self).__module__
+        if name:
+            full_name += "." + name
+        self.logger = logging.getLogger(full_name)
+
     @classmethod
     @abstractmethod
     def get_instances(cls, common_config, configs):
@@ -57,9 +65,10 @@ class BioTextGetterBackend(BioLinksGetterBackend):
 
 
 class Unavailable(RuntimeError):
-    def __init__(self, message, seconds=0):
+    def __init__(self, message, seconds=0, retry_elsewhere=False):
         super().__init__(message)
         self.seconds = seconds
+        self.retry_elsewhere = retry_elsewhere
 
 
 class Broken(RuntimeError):

@@ -21,7 +21,7 @@ import argparse
 from . import bot, backend_manager
 
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 
 async def main():

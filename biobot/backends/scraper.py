@@ -21,6 +21,7 @@ from lxml import html
 
 class ScraperBackend(backends.BioTextGetterBackend):
     def __init__(self):
+        self._setup_logging()
         self.session = aiohttp.ClientSession(raise_for_status=True)
 
     @classmethod
@@ -29,13 +30,13 @@ class ScraperBackend(backends.BioTextGetterBackend):
 
     async def get_bio_text(self, uid, username):
         if username is None:
-            raise backends.Unavailable("A username is required to scrape.")
+            raise backends.Unavailable("A username is required to scrape.", retry_elsewhere=True)
         async with self.session.get("https://t.me/" + username) as resp:
             text = await resp.text()
         tree = html.fromstring(text)
         if tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]/a[contains(concat(' ',normalize-space(@class),' '),' tgme_username_link ')]"):
             # This happens if the username doesnt exist, OR we"re being rate-limited.
-            raise backends.Unavailable("Might be rate limited.", 0.2)
+            raise backends.Unavailable("Might be rate limited.", 0.2, True)
         desc = tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//node()", smart_strings=False)
         return "".join((isinstance(e, str) and e) or (e.tag == "br" and "\n") or "" for e in desc)
 

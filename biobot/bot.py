@@ -142,7 +142,7 @@ class BioBot:
     async def run(self, backend):
         self.backend = backend
         await self.client.send_message(self.bot_group, "🆙 and 🏃ing!")
-        print("Up and running!")
+        logger.info("Up and running!")
         await self.client.run_until_disconnected()
 
     @error_handler
@@ -384,7 +384,6 @@ class BioBot:
         invite = await self.client(telethon.tl.functions.messages.ExportChatInviteRequest(self.main_group, expire_date=datetime.timedelta(hours=1), usage_limit=1))
         escaped = base64.urlsafe_b64encode(invite.link.removeprefix("https://").encode("utf-8")).decode("utf-8").replace("=", "")
         try:
-            print("t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
             await event.answer(url="t.me/{}?start=invt{:08X}{}".format(self.username, message.id, escaped))
         except telethon.errors.rpcerrorlist.QueryIdInvalidError:
             pass

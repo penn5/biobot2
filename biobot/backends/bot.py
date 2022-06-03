@@ -22,6 +22,7 @@ import telethon
 class BotBackend(userbot.UserbotBackend):
     def __init__(self, bot, group_id, api_id, api_hash):
         self.token = bot if isinstance(bot, str) else None
+        self._setup_logging((self.token or "<bot>").partition(":")[0])
         self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash) if isinstance(bot, str) else bot
         self.group = group_id
 
@@ -33,5 +34,14 @@ class BotBackend(userbot.UserbotBackend):
 
     async def init(self):
         if self.token:
-            await self.client.start(bot_token=self.token)
+            try:
+                await self.client.start(bot_token=self.token)
+            except telethon.errors.rpcerrorlist.AccessTokenExpiredError:
+                self.logger.error("Bot token expired")
+                raise
         self.client.flood_sleep_threshold = 0
+
+    async def close(self):
+        if self.token:
+            super().close()
+        # else we're borrowing the bot and mustn't disconnect

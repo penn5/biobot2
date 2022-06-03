@@ -20,6 +20,7 @@ import telethon
 
 class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBackend):
     def __init__(self, phone, api_id, api_hash, group_id, auth_key=None, test_dc=0):
+        self._setup_logging(phone + "@" + str(test_dc))
         self.phone = phone
         self.group_id = group_id
         self.auth_key = auth_key
@@ -38,15 +39,15 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
 
     async def init(self):
         if not self.auth_key:
-            print(f"Signing in for {self.phone}")
+            self.logger.info(f"Signing in")
         try:
             await self.client.start(self.phone, code_callback=self.login_code and (lambda: self.login_code) or (lambda: input(f"Enter login the code you received on {self.phone}: ")))
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
-            print(f"Unable to sign in to {self.phone}")
+            self.logger.error("Unable to sign in due to duplicate auth key")
             raise
         if not self.auth_key and not self.login_code:
             self.auth_key = telethon.sessions.StringSession.save(self.client.session)
-            print(f"Please put '{self.auth_key}' as the auth_key for {self.phone} in the config.json")
+            self.logger.info("Please put '%s' as the auth_key in the config.json", self.auth_key)
         async for dialog in self.client.iter_dialogs():
             if dialog.id == self.group_id:
                 self.group = dialog.entity
@@ -81,6 +82,7 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             raise backends.Broken("Auth key duplicated")
         except ValueError:
+            self.logger.debug("User was not known by userbot, fetching members")
             members = await self.get_joined_users()
             try:
                 user = telethon.types.InputUser(uid, members[(uid, username)]["access_hash"])

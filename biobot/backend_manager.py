@@ -49,13 +49,21 @@ class Backends:
         for module, config in backend_config.items():
             backend = getattr(backends, module)
             self._backends += backend.get_instances(self._bot, common_config, config)
-        # Initialise synchronously to make authentication easier
+        self._tasks = [[] for _ in self._backends]
+        results = await asyncio.gather(*[backend.init() for backend in self._backends], return_exceptions=True)
         for backend_i, backend in enumerate(self._backends):
-            await backend.init()
-            self._tasks.append([])
+            result = results[backend_i]
+            if isinstance(result, Exception):
+                backend.logger.error("Initialisation failed", exc_info=result)
+                self._backends[backend_i] = None
+                continue
+            backend.logger.debug("Backend ID %d", backend_i)
             for operation_i, (operation, test_class) in enumerate(self._operations):
                 if isinstance(backend, test_class):
                     self._tasks[backend_i].append(asyncio.create_task(self._act(operation, operation_i, backend, backend_i)))
+        if all(backend is None for backend in self._backends):
+            logger.critical("All backends failed to initialise")
+            self._dead = True
 
     async def __aenter__(self):
         await self.init()
@@ -66,7 +74,7 @@ class Backends:
             return
         self._dead = True
         self._config = None
-        await asyncio.gather(*[backend.close() for backend in self._backends])
+        await asyncio.gather(*[backend.close() for backend in self._backends if backend is not None])
         self._backends = None
         for task in itertools.chain.from_iterable(self._tasks):
             task.cancel()
@@ -76,23 +84,46 @@ class Backends:
             except asyncio.CancelledError:
                 pass
             except BaseException as e:
-                logging.error("Failed to cancel %r", task)
+                logger.exception("Failed to cancel %r", task)
         self._tasks.clear()
-        for queue in self._queues:
+        for queue_i, queue in enumerate(self._queues):
             while True:
                 try:
-                    _, _, fut = queue.get_nowait()
+                    args, kwargs, fut, _, _ = queue.get_nowait()
                 except asyncio.QueueEmpty:
                     break
-                fut.set_exception(RuntimeError("Shutting down"))
+                if not fut.done():
+                    logger.debug("Aborting pending task on %d (%r, %r) for %r", queue_i, args, kwargs, fut)
+                    fut.set_exception(RuntimeError("Shutting down"))
+                else:
+                    logger.debug("Ignoring done task on %d (%r, %r) for %r", queue_i, args, kwargs, fut)
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.close()
 
+    async def _close_backend(self, tasks, backend, backend_id):
+        # must be shielded
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except BaseException as e:
+                logger.exception("Failed to cancel %r", task)
+        tasks.clear()
+        if backend in self._backends:
+            self._backends[backend_id] = None
+            await backend.close()
+            if all(backend is None for backend in self._backends):
+                logger.critical("No more serviceable backends!")
+                await self.close()
+
     async def _do(self, operation, *args, **kwargs):
         if self._dead:
             raise RuntimeError("No serviceable backends available!")
-        return await (await self._put_queue(operation, args, kwargs))
+        return await self._put_queue(operation, args, kwargs)
 
     def get_joined_users(self):
         return self._do(OP_JOINED)
@@ -103,37 +134,61 @@ class Backends:
     async def _get_queue(self, operation):
         return await self._queues[operation].get()
 
-    async def _put_queue(self, operation, args, kwargs, fut=None):
+    def _put_queue(self, operation, args, kwargs, fut=None, allowed_backends=None, retry_count=5):
         if fut is None:
             fut = asyncio.Future()
-        await self._queues[operation].put((args, kwargs, fut))
+        if allowed_backends and all(self._backends[backend] is None for backend in allowed_backends):
+            if retry_count:
+                retry_count -= 1
+                allowed_backends = None
+                logger.warning("No backends remaining on %d (%r, %r) for %r, resetting (remaining %d)", operation, args, kwargs, fut, retry_count)
+            else:
+                logger.error("No backends remaining on %d (%r, %r) for %r, failing", operation, args, kwargs, fut)
+                fut.set_exception(RuntimeError("No backends remaining"))
+                return fut
+        if allowed_backends is None:
+            allowed_backends = set(range(len(self._backends)))
+        self._queues[operation].put_nowait((args, kwargs, fut, allowed_backends, retry_count))
         return fut
 
     async def _act(self, operation, operation_i, backend, backend_id):
         op = operation(backend)
         while True:
-            args, kwargs, fut = await self._get_queue(operation_i)
+            await asyncio.sleep(0)  # prevent a single actor hogging the thread
+            args, kwargs, fut, allowed_backends, retry_count = await self._get_queue(operation_i)
+            backend.logger.debug("Received %d (%r, %r) for %r (allowed %r)", operation_i, args, kwargs, fut, allowed_backends)
+            if backend_id not in allowed_backends:
+                self._put_queue(operation_i, args, kwargs, fut, allowed_backends)
+                continue
             try:
+                backend.logger.debug("Starting %r %d", args, self.request_timeout)
                 ret = await asyncio.wait_for(op(*args, **kwargs), timeout=self.request_timeout)
             except BaseException as e:
-                if isinstance(e, Unavailable) or isinstance(e, asyncio.TimeoutError):
-                    if isinstance(e, asyncio.TimeoutError):
-                        logging.warning("Backend %r timed out on %d (%r, %r) for %r", backend, operation_i, args, kwargs, fut)
-                    await self._put_queue(operation_i, args, kwargs, fut)
+                backend.logger.exception("Err %r", args)
+                if isinstance(e, Unavailable):
+                    if e.retry_elsewhere:
+                        allowed_backends.remove(backend_id)
+                    backend.logger.debug("Unavailable on %d (%r, %r) for %r (next %r) (delay %d)", operation_i, args, kwargs, fut, allowed_backends, e.seconds)
+                    self._put_queue(operation_i, args, kwargs, fut, allowed_backends, retry_count)
                     await asyncio.sleep(e.seconds)
+                elif isinstance(e, asyncio.TimeoutError):
+                    backend.logger.warning("Timed out on %d (%r, %r) for %r", operation_i, args, kwargs, fut)
+                    self._put_queue(operation_i, args, kwargs, fut, allowed_backends, retry_count)
                 elif isinstance(e, Broken):
-                    logging.exception("Backend %r broken on %d (%r, %r) for %r", backend, operation_i, args, kwargs, fut)
-                    await self._put_queue(operation_i, args, kwargs, fut)
-                    self._tasks[backend_id].clear()
-                    if all(not task for task in self._tasks):
-                        logging.critical("No more backends serviceable!")
-                        await self.close()
-                    else:
-                        await asyncio.shield(backend.close())
-                    return  # give up.
+                    backend.logger.exception("Broken on %d (%r, %r) for %r", operation_i, args, kwargs, fut)
+                    logging.debug("Remaining backends: %r", self._backends)
+                    self._put_queue(operation_i, args, kwargs, fut, allowed_backends, retry_count)
+                    await asyncio.shield(self._close_backend(self._tasks[backend_id], backend, backend_id))
+                    backend.logger.error("Failed actor %d was not cancelled", operation_i)
+                    return
+                elif isinstance(e, asyncio.CancelledError):
+                    # actor cancelled, return to queue
+                    self._put_queue(operation_i, args, kwargs, fut, allowed_backends, retry_count)
+                    backend.logger.debug("Cancelled")
+                    raise
                 else:
+                    backend.logger.debug("Exception on %d (%r, %r) for %r", operation_i, args, kwargs, fut)
                     fut.set_exception(e)
-                    if isinstance(e, asyncio.CancelledError):
-                        raise
             else:
+                backend.logger.debug("Success on %d (%r, %r) for %r", operation_i, args, kwargs, fut)
                 fut.set_result(ret)
