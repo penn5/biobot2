@@ -267,51 +267,51 @@ class BioBot:
             entries = log.getMemoryHandler().dumps(level)
             if entries:
                 logs = (
-"<!DOCTYPE html>"
-"<html>"
-  "<head>"
-    "<style>"
-      # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA by Rounin
-      + (
-      "pre {"
-        "white-space: pre-wrap;"
-      "}"
+                    "<!DOCTYPE html>"
+                    "<html>"
+                      "<head>"
+                        "<style>"
+                          # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA by Rounin
+                          + (
+                          "pre {"
+                            "white-space: pre-wrap;"
+                          "}"
 
-      "pre::before {"
-        "counter-reset: listing;"
-      "}"
+                          "pre::before {"
+                            "counter-reset: listing;"
+                          "}"
 
-      "code {"
-        "counter-increment: listing;"
-        "text-align: left;"
-        "float: left;"
-        "clear: left;"
-        "margin-left: 4em;"
-        "margin-bottom: 1em;"
-      "}"
+                          "code {"
+                            "counter-increment: listing;"
+                            "text-align: left;"
+                            "float: left;"
+                            "clear: left;"
+                            "margin-left: 4em;"
+                            "margin-bottom: 1em;"
+                          "}"
 
-      "code::before {"
-        "content: counter(listing) \". \";"
-        "display: block;"
-        "float: left;"
-        "text-align: right;"
-        "width: 4em;"
-        "margin-left: -4em;"
-      "}"
+                          "code::before {"
+                            "content: counter(listing) \". \";"
+                            "display: block;"
+                            "float: left;"
+                            "text-align: right;"
+                            "width: 4em;"
+                            "margin-left: -4em;"
+                          "}"
 
-      "code > br {"
-        "display: none;"
-      "}"
-      ).replace(": ", ":").replace(" {", "{") +
-    "</style>"
-  "</head>"
-  "<body>"
-    "<pre class=\"code\">\n"
-      + "<br>".join(entries) +
-    "\n</pre>"
-  "</body>"
-"</html>"
-).encode("utf-8")
+                          "code > br {"
+                            "display: none;"
+                          "}"
+                          ).replace(": ", ":").replace(" {", "{") +
+                        "</style>"
+                      "</head>"
+                      "<body>"
+                        "<pre class=\"code\">\n"
+                          + "<br>".join(entries) +
+                        "\n</pre>"
+                      "</body>"
+                    "</html>"
+                ).encode("utf-8")
                 file = io.BytesIO(logs)
                 file.name = "logs.html"
                 await self.client.send_message(event.sender_id, file=file)

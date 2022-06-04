@@ -70,9 +70,29 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
             raise backends.Broken("Auth key duplicated")
         return ret
 
-    async def get_bio_text(self, uid, username):
+    async def get_bio_text(self, uid, username, allow_search=True):
         try:
-            full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
+            try:
+                full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
+            except ValueError:
+                self.logger.debug("User %r/%r not cached", uid, username)
+                if username and allow_search:
+                    self.logger.debug("Searching for %s", username)
+                    async for user in self.client.iter_participants(self.group, search=username):
+                        if user.username.casefold() == username.casefold():
+                            break
+                    else:
+                        self.logger.debug("Didn't find user %s", username)
+                        return ""
+                elif uid and isinstance(uid, int) and allow_search:
+                    self.logger.debug("Fetching users")
+                    async for user in self.client.iter_participants(self.group):
+                        if user.uid == uid:
+                            break
+                    else:
+                        raise backends.Unavailable("User not found in group by this userbot", retry_elsewhere=True)
+                self.logger.debug("Fetching bio for %r", user)
+                return await self.get_bio_text(user, username, False)
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
@@ -81,16 +101,7 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
             raise backends.Broken("User deactivated")
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             raise backends.Broken("Auth key duplicated")
-        except ValueError:
-            self.logger.debug("User was not known by userbot, fetching members")
-            members = await self.get_joined_users()
-            try:
-                user = telethon.types.InputUser(uid, members[(uid, username)]["access_hash"])
-            except KeyError:
-                # either uid was already a Peer in which case we should fail to avoid infinite retries, or the user just isn't there, in which case they have effectively a blank bio
-                return ""
-            return await self.get_bio_text(user, username)
-        if full.user.username != username:
+        if (full.user.username or "").casefold() != (username or "").casefold():
             raise backends.Unavailable("Usernames do not match.")
         return full.about or ""
 

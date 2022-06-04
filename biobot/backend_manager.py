@@ -156,7 +156,6 @@ class Backends:
         while True:
             await asyncio.sleep(0)  # prevent a single actor hogging the thread
             args, kwargs, fut, allowed_backends, retry_count = await self._get_queue(operation_i)
-            backend.logger.debug("Received %d (%r, %r) for %r (allowed %r)", operation_i, args, kwargs, fut, allowed_backends)
             if backend_id not in allowed_backends:
                 self._put_queue(operation_i, args, kwargs, fut, allowed_backends)
                 continue
@@ -164,7 +163,6 @@ class Backends:
                 backend.logger.debug("Starting %r %d", args, self.request_timeout)
                 ret = await asyncio.wait_for(op(*args, **kwargs), timeout=self.request_timeout)
             except BaseException as e:
-                backend.logger.exception("Err %r", args)
                 if isinstance(e, Unavailable):
                     if e.retry_elsewhere:
                         allowed_backends.remove(backend_id)
