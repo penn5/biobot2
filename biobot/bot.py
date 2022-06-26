@@ -217,6 +217,7 @@ class BioBot:
         new = await event.reply(await tr(event, "please_wait"))
         data = await self._select_backend(event, error=new)
         graph = await core.get_bios(data)
+        await self._store_data(graph)
         name = event.pattern_match[2]
         try:
             name = int(name)
@@ -650,9 +651,11 @@ async def send(message, text, **kwargs):
     messages = split(text, entities)
     if message.out:
         current_text, current_entities = next(messages)
+        current_html = telethon.extensions.html.unparse(current_text, current_entities)
         try:
-            await message.edit(current_text, formatting_entities=current_entities, **kwargs)
+            await message.edit(current_html, parse_mode="html", **kwargs)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             pass
     for current_text, current_entities in messages:
-        message = await message.reply(current_text, formatting_entities=current_entities, silent=True, **kwargs)
+        current_html = telethon.extensions.html.unparse(current_text, current_entities)
+        message = await message.reply(current_html, parse_mode="html", silent=True, **kwargs)
