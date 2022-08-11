@@ -22,7 +22,6 @@ from . import bot, backend_manager, log
 
 
 log.init().setLevel(logging.INFO)
-#logging.basicConfig(level=logging.DEBUG)
 
 
 async def main():

@@ -109,34 +109,36 @@ class BioBot:
 
     async def add_handlers(self):
         start = r"^(?:\/|!)"
-        eoc = fr"(?:$|\s|@{self.username}(?:$|\s))"
+        eoc = fr"(?:@{self.username})?"
         data = r"(?:(?:#data_?)?(\d+))"
-        username = r"(?:@?([a-zA-Z0-9_]{{5,}}|[0-9]+))"
+        username = r"(?:@?([a-zA-Z0-9_]{5,}|[0-9]+))"
 
         self.client.add_event_handler(self.ping_command,
                                       telethon.events.NewMessage(pattern=fr"{start}ping{eoc}"))
+        self.client.add_event_handler(self.help_command,
+                                      telethon.events.NewMessage(pattern=fr"{start}help{eoc}"))
         self.client.add_event_handler(self.chain_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}chain{eoc}{data}?"))
-        self.client.add_event_handler(self.chain_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}locate{eoc}{data}?(?: {username})?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}chain{eoc}(?:\s{data})?"))
+        self.client.add_event_handler(self.locate_command,
+                                      telethon.events.NewMessage(pattern=fr"{start}locate{eoc}(?:\s{data})?(?:\s{username})?"))
         self.client.add_event_handler(self.notinchain_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}notinchain{eoc}{data}?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}notinchain{eoc}(?:\s{data})?"))
         self.client.add_event_handler(self.allchains_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}allchains{eoc}{data}?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}allchains{eoc}(?:\s{data})?"))
         self.client.add_event_handler(self.fetchdata_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}(?:get|fetch)data{eoc}{data}?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}(?:get|fetch)data{eoc}(?:\s{data})?"))
         self.client.add_event_handler(self.diff_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}tdiff{eoc}(?:{data}(?: {data})?)?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}tdiff{eoc}(?:\s{data}(?:\s{data})?)?"))
         self.client.add_event_handler(self.gdiff_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}gdiff{eoc}(?:{data}(?: {data})?)?(?: \.(\w+))?"))
+                                      telethon.events.NewMessage(pattern=fr"{start}gdiff{eoc}(?:\s{data}(?:\s{data})?)?(?:\s\.(\w+))?"))
         self.client.add_event_handler(self.link_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}(?:perma)?link{eoc}(?:{data} )?{username}"))
+                                      telethon.events.NewMessage(pattern=fr"{start}(?:perma)?link{eoc}(?:\s{data})?(?:\s{username})?"))
         self.client.add_event_handler(self.start_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}start{eoc}(.*)"))
+                                      telethon.events.NewMessage(pattern=fr"{start}start{eoc}(?:\s(.+))?"))
         self.client.add_event_handler(self.logs_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}logs{eoc}(\d*)"))
+                                      telethon.events.NewMessage(pattern=fr"{start}logs{eoc}(?:\s(\d+))?"))
         self.client.add_event_handler(self.log_capacity_command,
-                                      telethon.events.NewMessage(pattern=fr"{start}log_capacity{eoc}(\d*)"))
+                                      telethon.events.NewMessage(pattern=fr"{start}log_capacity{eoc}(?:\s(\d+))?"))
         self.client.add_event_handler(self.user_joined_admission,
                                       telethon.events.ChatAction(chats=self.admissions_group))
         self.client.add_event_handler(self.user_joined_main,
@@ -152,29 +154,71 @@ class BioBot:
 
     @error_handler
     async def ping_command(self, event):
-        await event.reply(await tr(event, "pong"))
+        await send(event, await tr(event, "pong"))
+
+    @error_handler
+    async def help_command(self, event):
+        await send(event, await tr(event, "help"))
+
+    @error_handler
+    @protected
+    async def locate_command(self, event):
+        name = event.pattern_match[2]
+        print(event.pattern_match, name)
+        if not name:
+            await send(event, await tr(event, "invalid_username"))
+            return
+        new = await send(event, await tr(event, "please_wait"))
+        backend, _ = await self._select_backend(event, error=new)
+        if not backend:
+            return
+        graph, chain = await core.get_chain(self.target, backend)
+        data = await self._store_data(graph)
+        filterfunc = _get_user_filter(name)
+        ret = filter(filterfunc, graph.nodes.items())
+        try:
+            ret = next(ret)
+        except StopIteration:
+            await send(new, (await tr(event, "user_not_found")).format(data))
+            return
+        username = ret[1]["username"]
+        if not username:
+            await send(new, (await tr(event, "user_not_found")).format(data))
+            return
+        i = chain.index(username)
+        segment = chain[max(0, i-3):i+4]
+        await send(new, (await tr(event, "chain_segment_format")).format(len(chain) - i, data, (await tr(event, "chain_delim")).join(user for user in await _format_user(segment, graph, False))))
 
     @error_handler
     @protected
     async def chain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, chain = await core.get_chain(self.target, await self._select_backend(event, error=new))
+        new = await send(event, await tr(event, "please_wait"))
+        backend, _ = await self._select_backend(event, error=new)
+        if not backend:
+            return
+        graph, chain = await core.get_chain(self.target, backend)
         data = await self._store_data(graph)
         await send(new, (await tr(event, "chain_format")).format(f"#chain_{len(chain)} {data}", (await tr(event, "chain_delim")).join(user for user in await _format_user(chain, graph, False))))
 
     @error_handler
     @protected
     async def notinchain_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, antichain = await core.get_notinchain(self.target, await self._select_backend(event, error=new))
+        new = await send(event, await tr(event, "please_wait"))
+        backend, _ = await self._select_backend(event, error=new)
+        if not backend:
+            return
+        graph, antichain = await core.get_notinchain(self.target, backend)
         data = await self._store_data(graph)
         await send(new, data + "\n" + "\n".join(user for user in await _format_user((user for user in antichain if graph.nodes[user]["uid"] is not None and not graph.nodes[user]["deleted"]), graph, True)))
 
     @error_handler
     @protected
     async def allchains_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        graph, chains = await core.get_chains(await self._select_backend(event, error=new))
+        new = await send(event, await tr(event, "please_wait"))
+        backend, _ = await self._select_backend(event, error=new)
+        if not backend:
+            return
+        graph, chains = await core.get_chains(backend)
         data = await self._store_data(graph)
         out = [" ⇒ ".join(await _format_user(chain, graph, False)) for chain in chains if len(chain) > 1 or graph.nodes[chain[0]]["uid"] is not None]
         await send(new, data + " " + "\n\n".join(out))
@@ -182,56 +226,73 @@ class BioBot:
     @error_handler
     @protected
     async def fetchdata_command(self, event):
-        await event.reply((await self._fetch_data(int(event.pattern_match[1]))) or await tr(event, "invalid_id"))
+        data = event.pattern_match[1]
+        if not data:
+            await send(event, await tr(event, "invalid_id"))
+            return
+        data = await self._fetch_data(int(data))
+        if not data:
+            await send(event, await tr(event, "invalid_id"))
+            return
+        await event.reply(file=data)
 
     @error_handler
     @protected
     async def diff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        backend = await self._select_backend(event, default_backend=False, error=new)
-        if not backend:
+        new = await send(event, await tr(event, "please_wait"))
+        old_backend, old_backend_id = await self._select_backend(event, default_backend=False, error=new)
+        if old_backend is False:
+            await send(new, await tr(event, "invalid_id"))
+        if not old_backend:
             return
-        graph, diff = await core.get_diff(backend, await self._select_backend(event, 1, error=new), await tr(event, "diff_username_delim"), "\n")
+        new_backend, _ = await self._select_backend(event, 1, error=new)
+        if not new_backend:
+            return
+        graph, diff = await core.get_diff(old_backend, new_backend, await tr(event, "diff_username_delim"), "\n")
         data = await self._store_data(graph)
         old_only_edges, new_only_edges, uid_edges, username_edges, old_only_names, new_only_names = diff
-        await send(new, (await tr(event, "diff_format")).format(data, new_only_names, old_only_names, username_edges, uid_edges, new_only_edges, old_only_edges))
+        await send(new, (await tr(event, "diff_format")).format(await _format_backend(event, old_backend_id), data, new_only_names, old_only_names, username_edges, uid_edges, new_only_edges, old_only_edges))
 
     @error_handler
     @protected
     async def gdiff_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        backend = await self._select_backend(event, default_backend=False, error=new)
-        if not backend:
+        new = await send(event, await tr(event, "please_wait"))
+        old_backend, old_backend_id = await self._select_backend(event, default_backend=False, error=new)
+        if old_backend is False:
+            await send(new, await tr(event, "invalid_id"))
+        if not old_backend:
+            return
+        new_backend, _ = await self._select_backend(event, 1, error=new)
+        if not new_backend:
             return
         format = event.pattern_match[3]
         if format not in ALLOWED_FORMATS:
             format = "svgz"
-        graph, diff = await core.get_gdiff(backend, await self._select_backend(event, 1, error=new), self.target, format)
-        await self._store_data(graph)
-        await event.reply(file=diff, force_document=True)
+        graph, diff = await core.get_gdiff(old_backend, new_backend, self.target, format)
+        data = await self._store_data(graph)
+        caption = (await tr(event, "gdiff_format")).format(await _format_backend(event, old_backend_id), data)
+        await event.reply(caption, file=diff, force_document=True)
         await new.delete()
 
     @error_handler
     @protected
     async def link_command(self, event):
-        new = await event.reply(await tr(event, "please_wait"))
-        data = await self._select_backend(event, error=new)
-        graph = await core.get_bios(data)
-        await self._store_data(graph)
         name = event.pattern_match[2]
-        try:
-            name = int(name)
-        except ValueError:
-            filterfunc = lambda x: x[1]["username"] and x[1]["username"].casefold() == name.casefold()
-        else:
-            filterfunc = lambda x: x[1]["uid"] == name
+        if not name:
+            await send(event, await tr(event, "invalid_username"))
+            return
+        new = await send(event, await tr(event, "please_wait"))
+        backend, _ = await self._select_backend(event, error=new)
+        graph = await core.get_bios(backend)
+        data = await self._store_data(graph)
+        filterfunc = _get_user_filter(name)
         ret = filter(filterfunc, graph.nodes.items())
         try:
             ret = next(ret)
         except StopIteration:
-            await send(new, await tr(event, "invalid_user"))
+            await send(new, (await tr(event, "user_not_found")).format(data))
             return
-        await send(new, await _format_user(ret[0], graph, True))
+        await send(new, (await tr(event, "link_format")).format(await _format_user(ret[0], graph, True), data))
 
     @error_handler
     async def start_command(self, event):
@@ -272,7 +333,7 @@ class BioBot:
                     "<html>"
                       "<head>"
                         "<style>"
-                          # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA by Rounin
+                          # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA 4.0 by Rounin
                           + (
                           "pre {"
                             "white-space: pre-wrap;"
@@ -288,7 +349,7 @@ class BioBot:
                             "float: left;"
                             "clear: left;"
                             "margin-left: 4em;"
-                            "margin-bottom: 1em;"
+                            "width: 100%;"
                           "}"
 
                           "code::before {"
@@ -300,15 +361,23 @@ class BioBot:
                             "margin-left: -4em;"
                           "}"
 
-                          "code > br {"
+                          "code>br {"
                             "display: none;"
                           "}"
-                          ).replace(": ", ":").replace(" {", "{") +
+                          # end of CC BY-SA 4.0 code
+
+                          # effectively adding a 1em margin below the element, but without affecting selections
+                          "code::after {"
+                            "height: 1em;"
+                            "display: block;"
+                            "content: \"\";"
+                          "}"
+                          ).replace(": ", ":").replace(" {", "{").replace(";}", "}") +
                         "</style>"
                       "</head>"
                       "<body>"
                         "<pre class=\"code\">\n"
-                          + "<br>".join(entries) +
+                          + "".join(entries) +
                         "\n</pre>"
                       "</body>"
                     "</html>"
@@ -326,7 +395,11 @@ class BioBot:
     @error_handler
     async def log_capacity_command(self, event):
         if event.sender_id in self.sudo_users:
-            capacity = int(event.pattern_match[1])
+            capacity = event.pattern_match[1]
+            if not capacity:
+                await send(event, await tr(event, "invalid_log_capacity"))
+                return
+            capacity = int(capacity)
             entries = log.getMemoryHandler().setCapacity(capacity)
             resp = "logs_capacity_updated"
         else:
@@ -344,10 +417,10 @@ class BioBot:
             else:
                 cb = None
         if cb is None:
-            await event.reply(await tr(event, "fix_anonymous"))
+            await send(event, await tr(event, "fix_anonymous"))
         else:
             cb = cb.to_bytes(8, "big")
-            await event.reply(await tr(event, "welcome_admission"),
+            await send(event, await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
 
     @error_handler
@@ -487,28 +560,29 @@ class BioBot:
                 data_id = int(data_id_str)
         except ValueError:
             await send(error, await tr(event, "invalid_id"))
+            return None, None
         except IndexError:
             pass
         if data_id is None and getattr(event, "is_reply", False) and not match_id:
             reply = await event.get_reply_message()
             if getattr(getattr(reply, "file", None), "name", None) in FILE_NAMES:
                 if event.sender_id in self.sudo_users:
-                    return (await reply.download_media(bytes), reply.file.name)
+                    return (await reply.download_media(bytes), reply.file.name), "file"
                 else:
                     await send(error, await tr(error, "untrusted_forbidden"))
-                    return
+                    return None, None
             if data_id is None:
                 try:
                     data_id = int(re.search(r"\s#data_?(\d+)\s", reply.text)[0])
                 except (ValueError, TypeError, IndexError):
                     pass
         if data_id is None:
-            return default_backend
+            return default_backend, "default"
         data = await self._fetch_data(data_id)
         if data is None:
             await send(error, await tr(event, "invalid_id"))
-            return default_backend
-        return (await data.download_media(bytes), data.file.name)
+            return None, None
+        return (await data.download_media(bytes), data.file.name), data_id
 
     async def _fetch_data(self, data_id):
         ret = await self.client.get_messages(self.data_group, ids=data_id)
@@ -535,8 +609,17 @@ class BioBot:
         return "#data_{}".format(message.id)
 
 
+def _get_user_filter(name):
+    try:
+        name = int(name)
+    except ValueError:
+        filterfunc = lambda x: x[1]["username"] and x[1]["username"].casefold() == name.casefold()
+    else:
+        filterfunc = lambda x: x[1]["uid"] == name
+    return filterfunc
+
+
 async def _format_user(name, graph, link):
-    # the data MUST have been stored before calling this function
     if not isinstance(name, (str, int)):
         return [await _format_user(this_name, graph, link) for this_name in name]
     if link:
@@ -548,6 +631,15 @@ async def _format_user(name, graph, link):
     else:
         return str(name)
     return ret.format(uid or name, name)
+
+
+async def _format_backend(event, backend):
+    if backend == "file":
+        return await tr("backend_file")
+    if backend == "default":
+        return await tr("backend_default")
+    assert isinstance(backend, int)
+    return "#data_{}".format(backend)
 
 
 def _move_entities(text, entities, move=0):
@@ -656,6 +748,12 @@ async def send(message, text, **kwargs):
             await message.edit(current_html, parse_mode="html", **kwargs)
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             pass
+        ret = None
+    else:
+        ret = True
     for current_text, current_entities in messages:
         current_html = telethon.extensions.html.unparse(current_text, current_entities)
         message = await message.reply(current_html, parse_mode="html", silent=True, **kwargs)
+        if ret is True:
+            ret = message
+    return ret
