@@ -741,7 +741,7 @@ def _copy_tl(o, **kwargs):
 async def send(message, text, **kwargs):
     text, entities = telethon.extensions.html.parse(text)
     messages = split(text, entities)
-    if message.out:
+    if getattr(message, "out", False):
         current_text, current_entities = next(messages)
         current_html = telethon.extensions.html.unparse(current_text, current_entities)
         try:
