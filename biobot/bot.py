@@ -185,7 +185,7 @@ class BioBot:
         if not username:
             await send(new, (await tr(event, "user_not_found")).format(data))
             return
-        i = chain.index(username)
+        i = chain.index(username.casefold())
         segment = chain[max(0, i-3):i+4]
         await send(new, (await tr(event, "chain_segment_format")).format(len(chain) - i, data, (await tr(event, "chain_delim")).join(user for user in await _format_user(segment, graph, False))))
 
@@ -431,7 +431,7 @@ class BioBot:
     @error_handler
     async def callback_query(self, event):
         for_user = int.from_bytes(event.data[1:9], "big")
-        if for_user != event.sender_id:
+        if for_user != event.sender_id and event.sender_id not in self.sudo_users:
             await event.answer(await tr(event, "click_forbidden"))
             return
         message = await event.get_message()
@@ -456,8 +456,7 @@ class BioBot:
                                         [Button.inline(await tr(event, "rules_reject"), b"c" + event.data[1:9])],
                                         [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:9] + b"s")]])
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
-            await event.answer(await tr(event, "button_loading"))
-            return
+            pass
         await event.answer((await tr(event, "read_rules")).format(self.rules_username), alert=True)
 
     async def callback_query_join(self, event, message):
@@ -466,7 +465,6 @@ class BioBot:
         except telethon.errors.rpcerrorlist.MessageNotModifiedError:
             await event.answer(await tr(event, "button_loading"))
             return
-        graph, chain = await core.get_chain(self.target, self.backend)
         input_entity = await event.get_input_sender()
         if not input_entity:
             # testmode support
@@ -476,9 +474,13 @@ class BioBot:
                                         [Button.inline(await tr(event, "cancel"), b"c" + event.data[1:9])],
                                         [Button.inline(await tr(event, "get_help"), b"h" + event.data[1:9] + b"s")]])
             return
+        graph, chain = await core.get_chain(self.target, self.backend)
         entity = await self.client.get_entity(input_entity)  # To prevent caching
         if entity.username and entity.username.lower() in (name.lower() for name in chain):
-            await event.answer(await tr(event, "already_in_chain"), alert=True)
+            try:
+                await event.answer(await tr(event, "already_in_chain"), alert=True)
+            except telethon.errors.rpcerrorlist.QueryIdInvalidError:
+                pass
             await message.edit(await tr(event, "already_in_chain"), buttons=None)
             return
         await self.callback_query_done(event, message, b"d" + event.data[1:9] + int(time.time()).to_bytes(8, "big") + next(filter(lambda name: isinstance(name, str), chain)).encode("ascii"))
