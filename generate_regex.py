@@ -108,7 +108,7 @@ def iterlines(file):
 
 def generate_regex(regex, categories):
     regex = regex_parser_p.sub(lambda match: match[1] + categories[match[2].strip("{}").casefold()], regex)
-    regex = regex_parser_P.sub(lambda match: match[1] + categories[match[2].strip("{}").casefold()].replace("[", "[^"), regex)
+    regex = regex_parser_P.sub(lambda match: match[1] + "[^" + categories[match[2].strip("{}").casefold()][1:], regex)
     return regex
 
 
@@ -127,7 +127,6 @@ def main():
     print("Testing... This will take a few minutes.")
     fail = False
     for category, test in category_regexes.items():
-        break
         print("Testing", category)
         expected = regex.compile("\p{" + category + "}", regex.V1)
         test_regex = re.compile(test)
