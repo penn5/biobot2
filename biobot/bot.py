@@ -140,9 +140,9 @@ class BioBot:
         self.client.add_event_handler(self.log_capacity_command,
                                       telethon.events.NewMessage(pattern=fr"{start}log_capacity{eoc}(?:\s(\d+))?"))
         self.client.add_event_handler(self.user_joined_admission,
-                                      telethon.events.ChatAction(chats=self.admissions_group))
+                                      telethon.events.ChatAction(func=lambda event: event.user_joined or event.user_added, chats=self.admissions_group))
         self.client.add_event_handler(self.user_joined_main,
-                                      telethon.events.ChatAction(chats=self.main_group))
+                                      telethon.events.ChatAction(func=lambda event: event.user_joined or event.user_added, chats=self.main_group))
         self.client.add_event_handler(self.callback_query,
                                       telethon.events.CallbackQuery())
 
@@ -423,10 +423,7 @@ class BioBot:
             await send(event, await tr(event, "welcome_admission"),
                               buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)])
 
-    @error_handler
-    async def user_joined_main(self, event):
-        if event.user_joined or event.user_added:
-            await self.chain_command(event)
+    user_joined_main = chain_command
 
     @error_handler
     async def callback_query(self, event):
