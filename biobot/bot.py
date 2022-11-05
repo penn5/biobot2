@@ -109,7 +109,7 @@ class BioBot:
 
     async def add_handlers(self):
         start = r"^(?:\/|!)"
-        eoc = fr"(?:@{self.username})?"
+        eoc = fr"(?:@{self.username}|\s|$)"
         data = r"(?:(?:#data_?)?(\d+))"
         username = r"(?:@?([a-zA-Z0-9_]{5,}|[0-9]+))"
 
