@@ -15,6 +15,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from . import chain, diff
+from .user import FullUser
 import asyncio
 import networkx
 
@@ -23,8 +24,9 @@ async def get_bios(backend):
     if isinstance(backend, (chain.Forest, tuple, networkx.DiGraph)):
         return chain.make_graph(backend)
     users = await backend.get_joined_users()
-    ret = await asyncio.gather(*[backend.get_bio_links(*u) for u in users])
-    return chain.make_graph(dict(zip(users, ret)), users)
+    bios = await asyncio.gather(*[backend.get_bio_text(u) for u in users])
+    full_users = [FullUser(user, bio) for user, bio in zip(users, bios)]
+    return chain.make_graph(full_users)
 
 
 async def get_chain(target, backend):

@@ -99,8 +99,8 @@ class User:
 
 
 def _destringize(data):
-    if data == "None":
-        return None
+    if data == "_biobot_empty_list":
+        return []
     try:
         return ast.literal_eval(data)
     except SyntaxError as e:
@@ -117,6 +117,9 @@ def make_graph(data, users_data={}):
         else:
             raise RuntimeError(f"file name {name} incorrect")
     if isinstance(data, networkx.DiGraph):
+        for node in data:
+            if "username" in data.nodes[node]:
+                data.nodes[node]["usernames"] = [data.nodes[node]["username"]]
         return data
     graph = networkx.DiGraph()
     if isinstance(data, Forest):
@@ -124,19 +127,32 @@ def make_graph(data, users_data={}):
         data = data.get_dict()
     else:
         old_data = None
-    for uid, username in data:
-        graph.add_node(username.casefold() if username else uid, username=username, uid=uid, **users_data.get((uid, username), {}))
-    for (uid, username), children in data.items():
-        name = username.casefold() if username else uid
-        for child in children:
-            child_name = child.casefold()
-            if child_name not in graph:
-                graph.add_node(child_name, username=child, uid=None)
-            graph.add_edge(name, child_name)
+    if isinstance(data, dict):
+        for uid, username in data:
+            graph.add_node(username.casefold() if username else uid, usernames=[username], uid=uid, deleted=None, about=None)
+        for (uid, username), children in data.items():
+            name = username.casefold() if username else uid
+            for child in children:
+                child_name = child.casefold()
+                if child_name not in graph:
+                    graph.add_node(child_name, usernames=[child], uid=None, deleted=None, about=None)
+                graph.add_edge(name, child_name)
+    else:  # list of FullUser
+        username_to_key = {}
+        for entry in data:
+            graph.add_node(entry.key, usernames=entry.usernames, uid=entry.id, deleted=entry.deleted, about=entry.about)
+            for username in entry.usernames:
+                username_to_key[username.casefold()] = entry.key
+        for entry in data:
+            for child in entry.points_to:
+                child_key = username_to_key.get(child.casefold(), None)
+                if not child_key:
+                    child_key = child.casefold()
+                    graph.add_node(child_key, usernames=[child], uid=None, deleted=None, about=None)
+                graph.add_edge(entry.key, child_key)
     if old_data:
         for node in old_data.get_nodes():
             name = node.username.casefold() if node.username else node.uid
-            graph.nodes[name]["access_hash"] = getattr(node.extras.get("entity", None), "access_hash", None)
             graph.nodes[name]["deleted"] = None
     return graph
 

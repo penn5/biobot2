@@ -15,6 +15,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from .. import backends
+from ..user import User, FullUser
 import telethon
 
 
@@ -56,10 +57,13 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
         self.client.flood_sleep_threshold = 0
 
     async def get_joined_users(self):
-        ret = {}
+        ret = []
         try:
             async for user in self.client.iter_participants(self.group):
-                ret[(user.id, user.username)] = {"deleted": user.deleted, "access_hash": user.access_hash}
+                usernames = [username.username for username in user.usernames] if user.usernames else []
+                if user.username and user.username not in usernames:
+                    usernames.insert(0, user.username)
+                ret.append(User(user.id, usernames, user.deleted))
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
@@ -70,29 +74,30 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
             raise backends.Broken("Auth key duplicated")
         return ret
 
-    async def get_bio_text(self, uid, username, allow_search=True):
+    async def get_bio_text(self, user, entity=None, allow_search=True):
         try:
             try:
-                full = await self.client(telethon.tl.functions.users.GetFullUserRequest(uid))
+                full = await self.client(telethon.tl.functions.users.GetFullUserRequest(entity or user.id))
             except ValueError:
-                self.logger.debug("User %r/%r not cached", uid, username)
-                if username and allow_search:
+                self.logger.debug("%r not cached", user)
+                if user.usernames and allow_search:
+                    username = user.usernames[0].casefold()
                     self.logger.debug("Searching for %s", username)
-                    async for user in self.client.iter_participants(self.group, search=username):
-                        if user.username.casefold() == username.casefold():
+                    async for found_user in self.client.iter_participants(self.group, search=username):
+                        if any(lambda found_username: found_username.username.casefold() == username, found_user.usernames):
                             break
                     else:
                         self.logger.debug("Didn't find user %s", username)
                         return ""
-                elif uid and isinstance(uid, int) and allow_search:
+                elif user.uid and allow_search:
                     self.logger.debug("Fetching users")
-                    async for user in self.client.iter_participants(self.group):
-                        if user.uid == uid:
+                    async for found_user in self.client.iter_participants(self.group):
+                        if found_user.uid == user.uid:
                             break
                     else:
                         raise backends.Unavailable("User not found in group by this userbot", retry_elsewhere=True)
                 self.logger.debug("Fetching bio for %r", user)
-                return await self.get_bio_text(user, username, False)
+                return await self.get_bio_text(user, found_user, False)
         except telethon.errors.rpcerrorlist.FloodWaitError as e:
             raise backends.Unavailable("Flood Wait", e.seconds)
         except telethon.errors.rpcerrorlist.UserDeactivatedBanError:
@@ -101,9 +106,10 @@ class UserbotBackend(backends.JoinedUsersGetterBackend, backends.BioTextGetterBa
             raise backends.Broken("User deactivated")
         except telethon.errors.rpcerrorlist.AuthKeyDuplicatedError:
             raise backends.Broken("Auth key duplicated")
-        if (full.user.username or "").casefold() != (username or "").casefold():
-            raise backends.Unavailable("Usernames do not match.")
-        return full.about or ""
+        try:
+            return full.full_user.about or ""
+        except Exception as e:
+            print("failed", e, full)
 
     async def close(self):
         if self.client is not None:

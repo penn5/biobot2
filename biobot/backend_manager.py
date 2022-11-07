@@ -15,7 +15,7 @@
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from . import backends
-from .backend import Unavailable, Broken, JoinedUsersGetterBackend, BioLinksGetterBackend
+from .backend import Unavailable, Broken, JoinedUsersGetterBackend, BioTextGetterBackend
 import logging
 import asyncio
 import itertools
@@ -31,7 +31,7 @@ OP_BIO = 1
 class Backends:
     _operations = (
         (lambda x: x.get_joined_users, JoinedUsersGetterBackend),
-        (lambda x: x.get_bio_links, BioLinksGetterBackend),
+        (lambda x: x.get_bio_text, BioTextGetterBackend),
     )
     request_timeout = 10.0
 
@@ -128,8 +128,8 @@ class Backends:
     def get_joined_users(self):
         return self._do(OP_JOINED)
 
-    def get_bio_links(self, uid, username):
-        return self._do(OP_BIO, uid, username)
+    def get_bio_text(self, user):
+        return self._do(OP_BIO, user)
 
     async def _get_queue(self, operation):
         return await self._queues[operation].get()

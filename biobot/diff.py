@@ -24,6 +24,7 @@ import scipy.spatial
 import io
 import random
 from .chain import make_chain
+from .user import User, FullUser
 import logging
 import operator
 
@@ -37,30 +38,32 @@ mpl.rcParams["svg.fonttype"] = "none"  # render fonts as text to make the svg se
 
 # names must always be unique
 
-def _default_namer(uid, username, full, node):
-    if not username:
-        ret = str(uid)
-    elif full and uid:
-        ret = f"{username} ({uid})"
+def _default_namer(user, full):
+    if not user.usernames:
+        ret = str(user.id)
+    elif full and user.id:
+        ret = f"{', '.join(user.usernames)} ({user.id})"
     else:
-        ret = username
-    if node.get("deleted", False):
+        ret = ", ".join(user.usernames)
+    if user.deleted:
         ret += "⌫"
-    if not uid and not full:
+    if not user.id and not full:
         ret += "⯑"
     return ret
 
 
-def _linking_namer(uid, username, full, node):
-    if not uid:
-        ret = f"<a href=\"https://t.me/{username}\">{username}</a>"
-    elif full and username and uid:
-        ret = f"<a href=\"https://t.me/{username}\">{username}</a> (<a href=\"tg://user?id={uid}\">{uid}</a>)"
+def _linking_namer(user, full):
+    if not user.id:
+        ret = ", ".join(f"<a href=\"https://t.me/{username}\">{username}</a>" for username in user.usernames)
+    elif full and user.username and user.uid:
+        ret = ", ".join(f"<a href=\"https://t.me/{username}\">{username}</a>" for username in user.usernames) + " (<a href=\"tg://user?id={user.id}\">{user.id}</a>)"
+    elif user.usernames:
+        ret = f"<a href=\"tg://user?id={user.id}\">{user.usernames[0]}</a>"
     else:
-        ret = f"<a href=\"tg://user?id={uid}\">{username or uid}</a>"
-    if node.get("deleted", False):
+        ret = f"<a href=\"tg://user?id={user.id}\">{user.id}</a>"
+    if user.deleted:
         ret += "⌫"
-    if not uid and not full:
+    if not user.id and not full:
         ret += "⯑"
     return ret
 
@@ -71,10 +74,15 @@ def _graph_to_dict(data):
     for name, children in data.adjacency():
         node = data.nodes[name]
         uid = node["uid"]
-        username = node["username"] and node["username"].casefold()
+        username = node["usernames"][0].casefold() if node["usernames"] else None
         ret[(uid, username)] = [child.casefold() for child in children if child != username]
         names[(uid, username)] = name
     return ret, names
+
+
+def _node_to_user(uid, username, mapping, graph):
+    node = graph.nodes[mapping[(uid, username)]]
+    return FullUser(User(uid, node["usernames"], node["deleted"]), node["about"])
 
 
 def _generate_diff_data(old_graph, new_graph, namer, ignore_edits):
@@ -93,8 +101,8 @@ def _generate_diff_data(old_graph, new_graph, namer, ignore_edits):
         if username is not None and old_username_to_uid.get(username, False) not in (uid, False):
             duplicate_usernames.add(username)
 
-    old_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames, old_graph.nodes[old_map[(uid, username)]]) for uid, username in old_data}
-    new_names = {username or uid: namer(uid, username, uid in duplicate_uids or username in duplicate_usernames, new_graph.nodes[new_map[(uid, username)]]) for uid, username in new_data}
+    old_names = {username or uid: namer(_node_to_user(uid, username, old_map, old_graph), uid in duplicate_uids or username in duplicate_usernames) for uid, username in old_data}
+    new_names = {username or uid: namer(_node_to_user(uid, username, new_map, new_graph), uid in duplicate_uids or username in duplicate_usernames) for uid, username in new_data}
 
     old_edges = {(old_names[username or uid], old_names.setdefault(child, child)) for (uid, username), children in old_data.items() for child in children}
     new_edges = {(new_names[username or uid], new_names.setdefault(child, child)) for (uid, username), children in new_data.items() for child in children}

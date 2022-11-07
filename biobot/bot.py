@@ -28,6 +28,7 @@ import networkx
 import base64
 import datetime
 import grapheme
+import types
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +76,9 @@ async def anext(aiter, default=False):
 
 
 def _stringize(data):
-    if data is None:
-        return "None"
-    if isinstance(data, str):
+    if data == []:
+        return "_biobot_empty_list"
+    if isinstance(data, (str, bool, types.NoneType)):
         return repr(data)
     raise ValueError
 
@@ -109,9 +110,9 @@ class BioBot:
 
     async def add_handlers(self):
         start = r"^(?:\/|!)"
-        eoc = fr"(?:@{self.username}|\s|$)"
+        eoc = fr"(?:@{self.username}|(?=\s)|$)"
         data = r"(?:(?:#data_?)?(\d+))"
-        username = r"(?:@?([a-zA-Z0-9_]{5,}|[0-9]+))"
+        username = r"(?:@?([a-zA-Z0-9_]{4,}|[0-9]+))"
 
         self.client.add_event_handler(self.ping_command,
                                       telethon.events.NewMessage(pattern=fr"{start}ping{eoc}"))
@@ -164,7 +165,6 @@ class BioBot:
     @protected
     async def locate_command(self, event):
         name = event.pattern_match[2]
-        print(event.pattern_match, name)
         if not name:
             await send(event, await tr(event, "invalid_username"))
             return
@@ -181,11 +181,11 @@ class BioBot:
         except StopIteration:
             await send(new, (await tr(event, "user_not_found")).format(data))
             return
-        username = ret[1]["username"]
-        if not username:
+        usernames = ret[1]["usernames"]
+        if not usernames:
             await send(new, (await tr(event, "user_not_found")).format(data))
             return
-        i = chain.index(username.casefold())
+        i = chain.index(usernames[0].casefold())  # might work
         segment = chain[max(0, i-3):i+4]
         await send(new, (await tr(event, "chain_segment_format")).format(len(chain) - i, data, (await tr(event, "chain_delim")).join(user for user in await _format_user(segment, graph, False))))
 
@@ -612,7 +612,8 @@ def _get_user_filter(name):
     try:
         name = int(name)
     except ValueError:
-        filterfunc = lambda x: x[1]["username"] and x[1]["username"].casefold() == name.casefold()
+        name = name.casefold()
+        filterfunc = lambda x: any(name == username.casefold() for username in x[1]["usernames"])
     else:
         filterfunc = lambda x: x[1]["uid"] == name
     return filterfunc

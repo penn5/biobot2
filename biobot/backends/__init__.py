@@ -14,9 +14,9 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from ..backend import Backend, Unavailable, Broken, JoinedUsersGetterBackend, BioLinksGetterBackend, BioTextGetterBackend
+from ..backend import Backend, Unavailable, Broken, JoinedUsersGetterBackend, BioTextGetterBackend
 from .userbot import UserbotBackend
 from .scraper import ScraperBackend
 from .bot import BotBackend
 
-__all__ = ["Backend", "Unavailable", "Broken", "JoinedUsersGetterBackend", "BioLinksGetterBackend", "BioTextGetterBackend", "UserbotBackend", "ScraperBackend", "BotBackend"]
+__all__ = ["Backend", "Unavailable", "Broken", "JoinedUsersGetterBackend", "BioTextGetterBackend", "UserbotBackend", "ScraperBackend", "BotBackend"]
