@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -14,16 +14,21 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from . import userbot
-
 import telethon
+
+from . import userbot
 
 
 class BotBackend(userbot.UserbotBackend):
+    # noinspection PyMissingConstructor
     def __init__(self, bot, group_id, api_id, api_hash):
         self.token = bot if isinstance(bot, str) else None
         self._setup_logging((self.token or "<bot>").partition(":")[0])
-        self.client = telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash) if isinstance(bot, str) else bot
+        self.client = (
+            telethon.TelegramClient(telethon.sessions.MemorySession(), api_id, api_hash)
+            if isinstance(bot, str)
+            else bot
+        )
         self.group = group_id
 
     @classmethod
@@ -37,11 +42,11 @@ class BotBackend(userbot.UserbotBackend):
             try:
                 await self.client.start(bot_token=self.token)
             except telethon.errors.rpcerrorlist.AccessTokenExpiredError:
-                self.logger.error("Bot token expired")
+                self.logger.error("Bot token expired: %s", self.token.split(":")[0])
                 raise
         self.client.flood_sleep_threshold = 0
 
     async def close(self):
         if self.token:
-            super().close()
+            await super().close()
         # else we're borrowing the bot and mustn't disconnect

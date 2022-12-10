@@ -1,3 +1,5 @@
 __pycache__
 /config.json
-poeditor_api_token.txt
+/poeditor_api_token.txt
+/.idea/
+/venv/

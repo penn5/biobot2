@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -14,14 +14,18 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from . import chain, diff
-from .user import FullUser
 import asyncio
+import io
+
 import networkx
+
+from . import chain, diff
+from .backend import Backend
+from .user import FullUser
 
 
 async def get_bios(backend):
-    if isinstance(backend, (chain.Forest, tuple, networkx.DiGraph)):
+    if not isinstance(backend, Backend):
         return chain.make_graph(backend)
     users = await backend.get_joined_users()
     bios = await asyncio.gather(*[backend.get_bio_text(u) for u in users])
@@ -47,10 +51,16 @@ async def get_chains(backend):
 async def get_diff(old, backend, *args, **kwargs):
     old = chain.make_graph(old)
     new = await get_bios(backend)
-    return new, await asyncio.to_thread(diff.textual_chain_diff, old, new, *args, **kwargs)
+    return new, await asyncio.to_thread(
+        diff.textual_chain_diff, old, new, *args, **kwargs
+    )
 
 
 async def get_gdiff(old, backend, *args, **kwargs):
     old = chain.make_graph(old)
     new = await get_bios(backend)
     return new, await asyncio.to_thread(diff.draw_chain_diff, old, new, *args, **kwargs)
+
+
+def write(graph: networkx.DiGraph, data: io.BytesIO):
+    chain.write(graph, data)

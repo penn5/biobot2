@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -14,12 +14,12 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import logging
+import argparse
 import asyncio
 import json
-import argparse
-from . import bot, backend_manager, log
+import logging
 
+from . import backend_manager, bot, log
 
 log.init().setLevel(logging.INFO)
 
@@ -31,7 +31,7 @@ async def main():
     config = json.load(args.config)
     frontend = bot.BioBot(main_group=config["common"]["group_id"], **config["frontend"])
     client = await frontend.init()
-    async with backend_manager.Backends(config, client) as backend:
+    async with backend_manager.BackendManager(config, client) as backend:
         await frontend.run(backend)
     assert False
 

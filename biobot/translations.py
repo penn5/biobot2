@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2021 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -16,16 +16,19 @@
 
 import json
 
-
 with open("translations.json") as file:
     translations = json.load(file)
 
 
 async def translate(message, key):
     sender = getattr(message, "get_sender", getattr(message, "get_user", lambda: None))
-    ret = translations.get(getattr(await sender(), "lang_code", None), {}).get(key, None)
+    ret = translations.get(getattr(await sender(), "lang_code", None), {}).get(
+        key, None
+    )
     if ret is None:
-        ret = translations.get("en", {}).get(key, "missing translation for {}".format(key))
+        ret = translations.get("en", {}).get(
+            key, "missing translation for {}".format(key)
+        )
     return ret
 
 

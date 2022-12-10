@@ -1,10 +1,10 @@
-#    Friendly Telegram (telegram userbot)
-#    Copyright (C) 2018-2019 The Authors
+#    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Affero General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
+#    it under the terms of the GNU Affero General Public License as
+#    published by the Free Software Foundation, either version 3 of the
+#    License, or (at your option) any later version.
 
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -14,26 +14,33 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import logging
 import collections
 import itertools
+import logging
+
 try:
     import coloredlogs  # Optional support for https://pypi.org/project/coloredlogs
     import coloredlogs.converter  # To switch between ANSI and HTML colors
 except ModuleNotFoundError:
     import html
+
     _formatter = logging.Formatter
 
     def _converter(s):
         return "<code>" + html.escape(s) + "</code>"
+
 else:
     _formatter = coloredlogs.ColoredFormatter
     _converter = coloredlogs.converter.convert
 
 
 class MemoryHandler(logging.Handler):
-    """Keeps 2 buffers. One for dispatched messages. One for unused messages. When the length of the 2 together is capacity
-       truncate to make them capacity together, first trimming handled then unused."""
+    """
+    Keeps 2 buffers. One for dispatched messages. One for unused messages.
+    When the length of the 2 together is capacity truncate to make them capacity together,
+    first trimming handled then unused.
+    """
+
     def __init__(self, target, capacity, error_capacity=None):
         super().__init__(0)
         self.target = target
@@ -71,13 +78,19 @@ class MemoryHandler(logging.Handler):
         """Return a list of logging entries"""
         self.acquire()
         try:
-            return list(itertools.chain(self.errorbuffer, self.handledbuffer, self.buffer))
+            return list(
+                itertools.chain(self.errorbuffer, self.handledbuffer, self.buffer)
+            )
         finally:
             self.release()
 
     def dumps(self, lvl=0):
         """Return all entries of minimum level as list of strings"""
-        return [self.formatRecord(record) for record in (self.dump()) if record.levelno >= lvl]
+        return [
+            self.formatRecord(record)
+            for record in (self.dump())
+            if record.levelno >= lvl
+        ]
 
     def formatRecord(self, record):
         return _converter(self.target.format(record))
@@ -89,7 +102,10 @@ class MemoryHandler(logging.Handler):
                 popped = (self.handledbuffer or self.buffer).popleft()
                 if self._isError(popped):
                     self.errorbuffer.append(popped)
-                    if self._error_capacity and len(self.errorbuffer) > self._error_capacity:
+                    if (
+                        self._error_capacity
+                        and len(self.errorbuffer) > self._error_capacity
+                    ):
                         self.errorbuffer.popleft()
             self.buffer.append(record)
             if self._isError(record):
@@ -113,4 +129,7 @@ def init(capacity=500):
 
 
 def getMemoryHandler():
-    return next(filter(lambda h: isinstance(h, MemoryHandler), logging.getLogger().handlers), None)
+    return next(
+        filter(lambda h: isinstance(h, MemoryHandler), logging.getLogger().handlers),
+        None,
+    )

@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -17,9 +17,12 @@
 import ast
 import collections
 import io
-import networkx
 import pickle
+import types
 
+import networkx
+
+from biobot.user import FullUser, get_key, node_to_user
 
 """Converts the username:bio dict to a tree of users, and optionally a list"""
 
@@ -55,8 +58,10 @@ class Forest:
         return ret
 
     def __getstate__(self):
-        return {k: (v.username, v.uid, [child.username for child in v.children], v.extras)
-                for k, v in self._instances.items()}
+        return {
+            k: (v.username, v.uid, [child.username for child in v.children], v.extras)
+            for k, v in self._instances.items()
+        }
 
     def __setstate__(self, state):
         self._instances = {}
@@ -86,8 +91,13 @@ class User:
 
     def _repr(self, instances):
         if self not in instances:
-            return "{" + self.username + ": [" + ", ".join(child._repr(instances + [self])
-                                                           for child in self.children) + "]}"
+            return (
+                "{"
+                + self.username
+                + ": ["
+                + ", ".join(child._repr(instances + [self]) for child in self.children)
+                + "]}"
+            )
         else:
             return f"(recursive loop to {self.username})"
 
@@ -107,53 +117,126 @@ def _destringize(data):
         raise ValueError from e
 
 
-def make_graph(data, users_data={}):
+def _stringize(data):
+    if data in ([], ()):
+        return "_biobot_empty_list"
+    if isinstance(data, (str, bool, types.NoneType)):
+        return repr(data)
+    raise ValueError
+
+
+def make_graph(data) -> networkx.DiGraph:
     if isinstance(data, tuple):
         data, name = data
         if name == "raw_chain.forest":
-            data = pickle.loads(data)
-        elif name == "chain.gml":
-            data = networkx.read_gml(io.BytesIO(data), destringizer=_destringize)
+            return upgrade_graph(unpickle_data(data))
+        if name == "chain.gml":
+            return parse_gml(data)
+        raise RuntimeError(f"file name {name} incorrect")
+    return full_users_to_graph(data)
+
+
+def full_users_to_graph(data: list[FullUser]) -> networkx.DiGraph:
+    graph = networkx.DiGraph(version=0)
+    username_to_key = {}
+    for entry in data:
+        graph.add_node(
+            entry.key,
+            usernames=entry.usernames,
+            uid=entry.id,
+            deleted=entry.deleted,
+            about=entry.about,
+        )
+        for username in entry.usernames:
+            username_to_key[username.casefold()] = entry.key
+    for entry in data:
+        for child in entry.points_to:
+            child_key = username_to_key.get(child.casefold(), None)
+            if not child_key:
+                # New node by username only
+                child_key = child.casefold()
+                graph.add_node(
+                    child_key, usernames=(child,), uid=None, deleted=None, about=""
+                )
+            graph.add_edge(entry.key, child_key)
+    for node, attr in graph.nodes.items():
+        print(node, attr)
+    return graph
+
+
+def parse_gml(data: bytes) -> networkx.DiGraph:
+    graph = networkx.read_gml(io.BytesIO(data), destringizer=_destringize)
+    fix_types(graph)  # deserialization is not quite a round trip
+    return upgrade_graph(graph)
+
+
+def fix_types(graph: networkx.DiGraph):
+    for node in graph.nodes.values():
+        if "usernames" in node:
+            assert isinstance(node["usernames"], (list, tuple)), node["usernames"]
+            node["usernames"] = tuple(node["usernames"])
+        if "deleted" in node:
+            if node["deleted"] is not None:
+                assert node["deleted"] in (0, 1), node["deleted"]
+                node["deleted"] = bool(node["deleted"])
+
+
+def upgrade_graph(graph: networkx.DiGraph) -> networkx.DiGraph:
+    if "version" not in graph.graph:
+        graph = upgrade_graph_v0(graph)
+    if graph.graph["version"] != 0:
+        raise ValueError(f"Unknown graph version {graph.graph['version']}")
+    return graph
+
+
+def upgrade_graph_v0(graph: networkx.DiGraph) -> networkx.DiGraph:
+    for node in graph:
+        if "username" in graph.nodes[node]:
+            username = graph.nodes[node]["username"]
+            graph.nodes[node]["usernames"] = (username,) if username else ()
+            del graph.nodes[node]["username"]
         else:
-            raise RuntimeError(f"file name {name} incorrect")
-    if isinstance(data, networkx.DiGraph):
-        for node in data:
-            if "username" in data.nodes[node]:
-                data.nodes[node]["usernames"] = [data.nodes[node]["username"]]
-        return data
+            graph.nodes[node]["usernames"] = tuple(graph.nodes[node]["usernames"])
+    for node in graph:
+        if "about" not in graph.nodes[node]:
+            graph.nodes[node]["about"] = " ".join(
+                "@" + graph.nodes[successor]["usernames"][0]
+                for successor in graph.successors(node)
+            )
+        elif graph.nodes[node]["about"] is None:
+            graph.nodes[node]["about"] = ""
+    for node in graph:
+        graph.nodes[node]["deleted"] = bool(graph.nodes[node]["deleted"])
+    mapping = {
+        node: get_key(attr["uid"], attr["usernames"])
+        for node, attr in graph.nodes.items()
+    }
+    networkx.relabel_nodes(graph, mapping, False)
+    graph.graph["version"] = 0
+    return graph
+
+
+def unpickle_data(data: bytes) -> networkx.DiGraph:
     graph = networkx.DiGraph()
-    if isinstance(data, Forest):
-        old_data = data
-        data = data.get_dict()
-    else:
-        old_data = None
-    if isinstance(data, dict):
-        for uid, username in data:
-            graph.add_node(username.casefold() if username else uid, usernames=[username], uid=uid, deleted=None, about=None)
-        for (uid, username), children in data.items():
-            name = username.casefold() if username else uid
-            for child in children:
-                child_name = child.casefold()
-                if child_name not in graph:
-                    graph.add_node(child_name, usernames=[child], uid=None, deleted=None, about=None)
-                graph.add_edge(name, child_name)
-    else:  # list of FullUser
-        username_to_key = {}
-        for entry in data:
-            graph.add_node(entry.key, usernames=entry.usernames, uid=entry.id, deleted=entry.deleted, about=entry.about)
-            for username in entry.usernames:
-                username_to_key[username.casefold()] = entry.key
-        for entry in data:
-            for child in entry.points_to:
-                child_key = username_to_key.get(child.casefold(), None)
-                if not child_key:
-                    child_key = child.casefold()
-                    graph.add_node(child_key, usernames=[child], uid=None, deleted=None, about=None)
-                graph.add_edge(entry.key, child_key)
-    if old_data:
-        for node in old_data.get_nodes():
-            name = node.username.casefold() if node.username else node.uid
-            graph.nodes[name]["deleted"] = None
+    data = pickle.loads(data)
+    data_dict = data.get_dict()
+    for uid, username in data_dict:
+        graph.add_node(
+            username.casefold() if username else uid,
+            username=username,
+            uid=uid,
+            deleted=None,
+        )
+    for (uid, username), children in data_dict.items():
+        name = username.casefold() if username else uid
+        for child in children:
+            child_name = child.casefold()
+            if child_name not in graph:
+                graph.add_node(child_name, username=child, uid=None, deleted=None)
+            graph.add_edge(name, child_name)
+    for node in data.get_nodes():
+        name = node.username.casefold() if node.username else node.uid
+        graph.nodes[name]["deleted"] = None
     return graph
 
 
@@ -212,25 +295,31 @@ def _edge_bfs(graph, root, get_children):
                     in_scores[child] = out_scores[node] + 1
                 nexts[edge] = last_edge
     best = max(out_scores.items(), key=_score_node)
-    next = best[0], None
+    next_edge = best[0], None
     ret = []
-    while next[0]:
-        ret.append(next[0])
-        next = nexts[next]
+    while next_edge[0]:
+        ret.append(next_edge[0])
+        next_edge = nexts[next_edge]
     return ret
 
 
-def make_chain(graph, target):
+def make_chain(graph: networkx.DiGraph, target: str) -> list[FullUser]:
     # select longest path, preferring chains ending in a username
-    return _edge_bfs(graph, target, networkx.DiGraph.predecessors)
+    return [
+        node_to_user(graph.nodes[user])
+        for user in _edge_bfs(graph, target, networkx.DiGraph.predecessors)
+    ]
 
 
-def make_notinchain(graph, target):
+def make_notinchain(graph: networkx.DiGraph, target: str) -> frozenset[FullUser]:
     chain = make_chain(graph, target)
-    return set(graph.nodes) - set(chain)
+    return frozenset(
+        node_to_user(graph.nodes[user])
+        for user in frozenset(graph.nodes) - frozenset(user.key for user in chain)
+    )
 
 
-def make_all_chains(data):
+def make_all_chains(data: networkx.DiGraph) -> list[list[FullUser]]:
     """
     Get a list of chains possible to generate from the data
     Prefers to make longer chains than shorter ones
@@ -249,8 +338,15 @@ def make_all_chains(data):
             # No actually the longest in the whole graph, but it is the longest in the component, so it's irrelevant.
             longest = _edge_bfs(cut, backwards[0], networkx.DiGraph.neighbors)
         else:
-            longest = max((_edge_bfs(cut, root, networkx.DiGraph.neighbors) for root in roots), key=_score_chain)
+            longest = max(
+                (_edge_bfs(cut, root, networkx.DiGraph.neighbors) for root in roots),
+                key=_score_chain,
+            )
         longest.reverse()
-        ret.append(longest)
+        ret.append([node_to_user(cut.nodes[user]) for user in longest])
         cut.remove_nodes_from(longest)
     return ret
+
+
+def write(graph: networkx.DiGraph, data: io.BytesIO):
+    networkx.write_gml(graph, data, stringizer=_stringize)

@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2019 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -14,31 +14,40 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from .. import backends
 import aiohttp
 from lxml import html
 
+from ..backend import BioTextGetterBackend, Unavailable
 
-class ScraperBackend(backends.BioTextGetterBackend):
+
+class ScraperBackend(BioTextGetterBackend):
     def __init__(self):
         self._setup_logging()
         self.session = aiohttp.ClientSession(raise_for_status=True)
 
     @classmethod
     def get_instances(cls, bot, common_config, configs):
-        return [cls()]
+        return [cls() for _ in configs]
 
-    async def get_bio_text(self, uid, username):
-        if username is None:
-            raise backends.Unavailable("A username is required to scrape.", retry_elsewhere=True)
-        async with self.session.get("https://t.me/" + username) as resp:
+    async def get_bio_text(self, user):
+        if not user.usernames:
+            raise Unavailable("A username is required to scrape.", retry_elsewhere=True)
+        async with self.session.get("https://t.me/" + user.usernames[0]) as resp:
             text = await resp.text()
         tree = html.fromstring(text)
-        if tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]/a[contains(concat(' ',normalize-space(@class),' '),' tgme_username_link ')]"):
-            # This happens if the username doesnt exist, OR we"re being rate-limited.
-            raise backends.Unavailable("Might be rate limited.", 0.2, True)
-        desc = tree.xpath("//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//node()", smart_strings=False)
-        return "".join((isinstance(e, str) and e) or (e.tag == "br" and "\n") or "" for e in desc)
+        if tree.xpath(
+            "//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]/a[contains(concat(' ',normalize-space(@class),' '),' tgme_username_link ')]"
+        ):
+            # This happens if the username doesn't exist or if we're being rate-limited.
+            # Since the user should always exit, we must be rate limited
+            raise Unavailable("Rate limited.", 1, True)
+        desc = tree.xpath(
+            "//div[contains(concat(' ',normalize-space(@class),' '),' tgme_page_description ')]//node()",
+            smart_strings=False,
+        )
+        return "".join(
+            (isinstance(e, str) and e) or (e.tag == "br" and "\n") or "" for e in desc
+        )
 
     async def close(self):
         if self.session is not None:

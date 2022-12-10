@@ -3,14 +3,17 @@
     "group_id": -1001180504638
   },
   "backend": {
-    "ScraperBackend": {},
+    "ScraperBackend": [
+      {}
+    ],
     "UserbotBackend": [
       {
         "phone": "+10123456789",
         "api_id": "123456",
         "api_hash": "0123456789abcdef0123456789abcdef",
         "auth_key": "leave this field blank to begin with."
-      }, {
+      },
+      {
         "phone": "+19876543210",
         "api_id": "123456",
         "api_hash": "0123456789abcdef0123456789abcdef",
