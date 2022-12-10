@@ -87,8 +87,6 @@ class UserbotBackend(JoinedUsersGetterBackend, BioTextGetterBackend):
             if entity.usernames
             else []
         )
-        if usernames:
-            self.logger.critical("Found %s with %r", entity, usernames)
         if entity.username and entity.username not in usernames:
             usernames.insert(0, entity.username)
         return User(entity.id, tuple(usernames), entity.deleted)

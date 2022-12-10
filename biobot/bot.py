@@ -16,58 +16,32 @@
 
 import base64
 import datetime
-import functools
 import io
 import logging
 import re
 import time
-import typing
 
-import grapheme
 import telethon
 from telethon.tl.custom.button import Button
 
 from . import core, log
 from .backends.bot import BotBackend
 from .translations import tr
-from .user import FullUser, get_bio_links, node_to_user
+from .user import get_bio_links, node_to_user
+from .utils import (
+    get_user_filter,
+    format_user,
+    format_backend,
+    send,
+    error_handler,
+    protected,
+    ChatActionJoinedByRequest,
+)
 
 logger = logging.getLogger(__name__)
 
 FILE_NAMES = {"chain.gml", "raw_chain.forest"}
 ALLOWED_FORMATS = {"svg", "svgz", "pdf"}
-
-
-def error_handler(func):
-    @functools.wraps(func)
-    async def wrapper(self, event):
-        try:
-            return await func(self, event)
-        except Exception:
-            await event.reply(await tr(event, "fatal_error"))
-            raise
-
-    return wrapper
-
-
-def protected(func):
-    @functools.wraps(func)
-    async def wrapper(self, event):
-        if (
-            event.chat_id != self.main_group
-            and event.chat_id != self.bot_group
-            and event.chat_id not in self.extra_groups
-            and event.sender_id not in self.sudo_users
-        ):
-            await event.reply(await tr(event, "forbidden"))
-        else:
-            return await func(self, event)
-
-    return wrapper
-
-
-def escape(text):
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 class BioBot:
@@ -201,7 +175,19 @@ class BioBot:
             ),
         )
         self.client.add_event_handler(
+            self.user_joined_main,
+            ChatActionJoinedByRequest(chats=self.main_group),
+        )
+        self.client.add_event_handler(
             self.callback_query, telethon.events.CallbackQuery()
+        )
+        self.client.add_event_handler(
+            self.join_request,
+            telethon.events.Raw(
+                telethon.tl.types.UpdateBotChatInviteRequester,
+                func=lambda event: telethon.utils.get_peer_id(event.peer, True)
+                == self.main_group,
+            ),
         )
 
     async def run(self, backend):
@@ -231,7 +217,7 @@ class BioBot:
             return
         graph, chain = await core.get_chain(self.target, backend)
         data = await self._store_data(graph)
-        filterfunc = _get_user_filter(name)
+        filterfunc = get_user_filter(name)
         ret = filter(filterfunc, chain)
         try:
             ret = next(ret)
@@ -246,7 +232,7 @@ class BioBot:
                 len(chain) - i,
                 data,
                 (await tr(event, "chain_delim")).join(
-                    await _format_user(segment, False)
+                    await format_user(segment, False)
                 ),
             ),
         )
@@ -254,6 +240,9 @@ class BioBot:
     @error_handler
     @protected
     async def chain_command(self, event):
+        await self.get_chain(event)
+
+    async def get_chain(self, event):
         new = await send(event, await tr(event, "please_wait"))
         backend, _ = await self._select_backend(event, error=new)
         if not backend:
@@ -265,11 +254,12 @@ class BioBot:
             (await tr(event, "chain_format")).format(
                 f"#chain_{len(chain)} {data}",
                 (await tr(event, "chain_delim")).join(
-                    user for user in await _format_user(chain, False)
+                    user for user in await format_user(chain, False)
                 ),
             ),
             split_on=((" ", "\n"),),
         )
+        return chain
 
     @error_handler
     @protected
@@ -285,7 +275,7 @@ class BioBot:
             data
             + "\n"
             + "\n".join(
-                await _format_user(
+                await format_user(
                     (
                         user
                         for user in antichain
@@ -306,7 +296,7 @@ class BioBot:
         graph, chains = await core.get_chains(backend)
         data = await self._store_data(graph)
         out = [
-            " ⇒ ".join(await _format_user(chain, False))
+            " ⇒ ".join(await format_user(chain, False))
             for chain in chains
             if len(chain) > 1
         ]
@@ -354,7 +344,7 @@ class BioBot:
         await send(
             new,
             (await tr(event, "diff_format")).format(
-                await _format_backend(event, old_backend_id),
+                await format_backend(event, old_backend_id),
                 data,
                 new_only_names,
                 old_only_names,
@@ -387,7 +377,7 @@ class BioBot:
         )
         data = await self._store_data(graph)
         caption = (await tr(event, "gdiff_format")).format(
-            await _format_backend(event, old_backend_id), data
+            await format_backend(event, old_backend_id), data
         )
         await event.reply(caption, file=diff, force_document=True)
         await new.delete()
@@ -403,7 +393,7 @@ class BioBot:
         backend, _ = await self._select_backend(event, error=new)
         graph = await core.get_bios(backend)
         data = await self._store_data(graph)
-        filterfunc = _get_user_filter(name)
+        filterfunc = get_user_filter(name)
         ret = filter(filterfunc, map(node_to_user, graph.nodes.values()))
         try:
             ret = next(ret)
@@ -412,9 +402,7 @@ class BioBot:
             return
         await send(
             new,
-            (await tr(event, "link_format")).format(
-                await _format_user(ret, True), data
-            ),
+            (await tr(event, "link_format")).format(await format_user(ret, True), data),
         )
 
     @error_handler
@@ -539,7 +527,7 @@ class BioBot:
                 await send(event, await tr(event, "invalid_log_capacity"))
                 return
             capacity = int(capacity)
-            entries = log.getMemoryHandler().setCapacity(capacity)
+            log.getMemoryHandler().setCapacity(capacity)
             resp = "logs_capacity_updated"
         else:
             resp = "logs_forbidden"
@@ -567,7 +555,26 @@ class BioBot:
                 buttons=[Button.inline(await tr(event, "click_me"), b"s" + cb)],
             )
 
-    user_joined_main = chain_command
+    async def join_request(self, event):
+        await self.client(
+            telethon.tl.functions.messages.EditExportedChatInviteRequest(
+                self.main_group, event.invite.link, revoked=True
+            )
+        )
+        try:
+            await self.client(
+                telethon.functions.messages.HideChatJoinRequestRequest(
+                    self.main_group, event.user_id, True
+                )
+            )
+        except telethon.errors.rpcerrorlist.UserAlreadyParticipantError:
+            pass
+
+    @error_handler
+    async def user_joined_main(self, event):
+        chain = await self.get_chain(event)
+        if not any(event.user_id == user.id for user in chain):
+            await self.client.kick_participant(self.main_group, event.user_id)
 
     @error_handler
     async def callback_query(self, event):
@@ -660,7 +667,7 @@ class BioBot:
             b"d"
             + event.data[1:9]
             + int(time.time()).to_bytes(8, "big")
-            + next(filter(lambda name: isinstance(name, str), chain)).encode("ascii"),
+            + chain[0].usernames[0].encode("ascii"),
         )
 
     async def callback_query_done(self, event, message, data=None):
@@ -686,8 +693,10 @@ class BioBot:
             entity = await self.client.get_entity(input_entity)  # To prevent caching
             bio = [
                 username.casefold()
-                for username in await get_bio_links(
-                    self.bot_backend.get_bio_text(self.bot_backend.get_user(entity))
+                for username in get_bio_links(
+                    await self.bot_backend.get_bio_text(
+                        self.bot_backend.get_user(entity)
+                    )
                 )
             ]
         if skip or data[17:].decode("ascii").casefold() not in bio:
@@ -730,7 +739,9 @@ class BioBot:
             return
         invite = await self.client(
             telethon.tl.functions.messages.ExportChatInviteRequest(
-                self.main_group, expire_date=datetime.timedelta(hours=1), usage_limit=1
+                self.main_group,
+                expire_date=datetime.timedelta(hours=1),
+                request_needed=True,
             )
         )
         escaped = (
@@ -840,206 +851,3 @@ class BioBot:
         data.seek(0)
         message = await self.client.send_message(self.data_group, file=data)
         return "#data_{}".format(message.id)
-
-
-def _get_user_filter(name):
-    try:
-        name = int(name)
-    except ValueError:
-        name = name.casefold()
-        filterfunc = lambda user: any(
-            name == username.casefold() for username in user.usernames
-        )
-    else:
-        filterfunc = lambda user: user.id == name
-    return filterfunc
-
-
-async def _format_user(user: typing.Union[FullUser, typing.Iterable[FullUser]], link):
-    if not isinstance(user, FullUser):
-        return [await _format_user(this_name, link) for this_name in user]
-    if link:
-        if user.id is None:
-            ret = '<a href="https://t.me/{}">{}</a>'
-        else:
-            ret = '<a href="tg://user?id={}">{}</a>'
-        return ret.format(user.id or user.usernames[0], ",".join(user.usernames))
-    else:
-        return ", ".join(user.usernames)
-
-
-async def _format_backend(event, backend):
-    if backend == "file":
-        return await tr(event, "backend_file")
-    if backend == "default":
-        return await tr(event, "backend_default")
-    assert isinstance(backend, int)
-    return "#data_{}".format(backend)
-
-
-def _move_entities(text, entities, move=0):
-    for entity in entities.copy():
-        if move:
-            entity.offset -= move
-        if entity.offset + entity.length <= 0:
-            entities.remove(entity)
-            continue
-        if entity.offset < 0:
-            entity.length += entity.offset
-            entity.offset = 0
-    length = 4096
-    count = 0
-    current_entities = []
-    for entity in entities:
-        count += 1
-        if count > 100:
-            length = entity.offset
-            break
-        current_entities.append(entity)
-    current_text = telethon.extensions.html.unparse(text[:length], current_entities)
-    text = text[length:]
-    return current_text, text, entities, length
-
-
-def split(text, entities, length=4096, split_on=("\n", " "), min_length=1):
-    """
-    Split the message into smaller messages.
-    A grapheme will never be broken. Entities will be displaced to match the right location. No inputs will be mutated.
-    The end of each message except the last one is stripped of characters from [split_on]
-    :param text: the plain text input
-    :param entities: the entities
-    :param length: the maximum length of a single message
-    :param split_on: characters (or strings) which are preferred for a message break,
-                     sorted by priority on the first dimension (highest priority first)
-    :param min_length: ignore any matches on [split_on] strings before this number of characters into each message
-    :return:
-    """
-    encoded = text.encode("utf-16le")
-    pending_entities = entities
-    text_offset = 0
-    bytes_offset = 0
-    text_length = len(text)
-    bytes_length = len(encoded)
-    while text_offset < text_length:
-        if bytes_offset + length * 2 >= bytes_length:
-            yield text[text_offset:], pending_entities
-            break
-        codepoint_count = len(
-            encoded[bytes_offset : bytes_offset + length * 2].decode(
-                "utf-16le", errors="ignore"
-            )
-        )
-        for priority_group in split_on:
-            first_search_index = -1
-            for search in priority_group:
-                search_index = text.rfind(
-                    search, text_offset + min_length, text_offset + codepoint_count
-                )
-                if search_index != -1 and search_index > first_search_index:
-                    first_search_index = search_index
-            if first_search_index != -1:
-                break
-        else:
-            first_search_index = text_offset + codepoint_count
-        split_index = grapheme.safe_split_index(text, first_search_index)
-        assert split_index > text_offset
-        split_offset_utf16 = (
-            len(text[text_offset:split_index].encode("utf-16le"))
-        ) // 2
-        exclude = 0
-        while (
-            split_index + exclude < text_length
-            and text[split_index + exclude] in split_on
-        ):
-            exclude += 1
-        current_entities = []
-        entities = pending_entities.copy()
-        pending_entities = []
-        for entity in entities:
-            if (
-                entity.offset < split_offset_utf16
-                and entity.offset + entity.length > split_offset_utf16 + exclude
-            ):
-                # spans boundary
-                current_entities.append(
-                    _copy_tl(entity, length=split_offset_utf16 - entity.offset)
-                )
-                pending_entities.append(
-                    _copy_tl(
-                        entity,
-                        offset=0,
-                        length=entity.offset
-                        + entity.length
-                        - split_offset_utf16
-                        - exclude,
-                    )
-                )
-            elif entity.offset < split_offset_utf16 < entity.offset + entity.length:
-                # overlaps boundary
-                current_entities.append(
-                    _copy_tl(entity, length=split_offset_utf16 - entity.offset)
-                )
-            elif entity.offset < split_offset_utf16:
-                # wholly left
-                current_entities.append(entity)
-            elif (
-                entity.offset + entity.length
-                > split_offset_utf16 + exclude
-                > entity.offset
-            ):
-                # overlaps right boundary
-                pending_entities.append(
-                    _copy_tl(
-                        entity,
-                        offset=0,
-                        length=entity.offset
-                        + entity.length
-                        - split_offset_utf16
-                        - exclude,
-                    )
-                )
-            elif entity.offset + entity.length > split_offset_utf16 + exclude:
-                # wholly right
-                pending_entities.append(
-                    _copy_tl(
-                        entity, offset=entity.offset - split_offset_utf16 - exclude
-                    )
-                )
-            else:
-                assert entity.length <= exclude
-                # ignore entity in whitespace
-        current_text = text[text_offset:split_index]
-        yield current_text, current_entities
-        text_offset = split_index + exclude
-        bytes_offset += len(current_text.encode("utf-16le"))
-        assert bytes_offset % 2 == 0
-
-
-def _copy_tl(o, **kwargs):
-    d = o.to_dict()
-    del d["_"]
-    d.update(kwargs)
-    return o.__class__(**d)
-
-
-async def send(message, text, split_on=("\n", " "), **kwargs):
-    text, entities = telethon.extensions.html.parse(text)
-    messages = split(text, entities, split_on=split_on)
-    if getattr(message, "out", False):
-        current_text, current_entities = next(messages)
-        current_html = telethon.extensions.html.unparse(current_text, current_entities)
-        try:
-            await message.edit(current_html, parse_mode="html", **kwargs)
-        except telethon.errors.rpcerrorlist.MessageNotModifiedError:
-            pass
-        ret = None
-    else:
-        ret = True
-    for current_text, current_entities in messages:
-        current_html = telethon.extensions.html.unparse(current_text, current_entities)
-        message = await message.reply(
-            current_html, parse_mode="html", silent=True, **kwargs
-        )
-        if ret is True:
-            ret = message
-    return ret

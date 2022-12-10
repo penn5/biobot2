@@ -19,6 +19,8 @@ import collections
 import regex
 import re
 
+import biobot.utils
+
 regex_parser_p = re.compile(r"(?<!\\)((?:\\\\)*)\\p(\{\w+?\}|\w)")
 regex_parser_P = re.compile(r"(?<!\\)((?:\\\\)*)\\P(\{\w+?\}|\w)")
 
@@ -31,7 +33,7 @@ regex_parser_P = re.compile(r"(?<!\\)((?:\\\\)*)\\P(\{\w+?\}|\w)")
 
 
 def parse_line(line, category_chars):
-    split = line.split(";", maxsplit=3)
+    split = biobot.utils.split(";", maxsplit=3)
     end_region = False
     if split[1][0] == "<" and split[1].endswith(", Last>"):
         end_region = True

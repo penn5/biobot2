@@ -1,5 +1,5 @@
 #    Bio Bot (Telegram bot for managing the @Bio_Chain_2)
-#    Copyright (C) 2021 Hackintosh Five
+#    Copyright (C) 2022 Hackintosh Five
 
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU Affero General Public License as
@@ -14,6 +14,7 @@
 #    You should have received a copy of the GNU Affero General Public License
 #    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import asyncio
 import json
 
 with open("translations.json") as file:
@@ -21,7 +22,9 @@ with open("translations.json") as file:
 
 
 async def translate(message, key):
-    sender = getattr(message, "get_sender", getattr(message, "get_user", lambda: None))
+    sender = getattr(
+        message, "get_sender", getattr(message, "get_user", lambda: asyncio.sleep(0))
+    )
     ret = translations.get(getattr(await sender(), "lang_code", None), {}).get(
         key, None
     )

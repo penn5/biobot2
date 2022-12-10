@@ -159,8 +159,6 @@ def full_users_to_graph(data: list[FullUser]) -> networkx.DiGraph:
                     child_key, usernames=(child,), uid=None, deleted=None, about=""
                 )
             graph.add_edge(entry.key, child_key)
-    for node, attr in graph.nodes.items():
-        print(node, attr)
     return graph
 
 
