@@ -120,18 +120,19 @@ class UserbotBackend(JoinedUsersGetterBackend, BioTextGetterBackend):
                     async for found_user in self.client.iter_participants(
                         self.group, search=username
                     ):
+                        parsed_found_user = self.get_user(found_user)
                         if any(
                             found_username.username.casefold() == username
-                            for found_username in found_user.usernames
+                            for found_username in parsed_found_user.usernames
                         ):
                             break
                     else:
                         self.logger.debug("Didn't find user %s", username)
                         return ""
-                elif user.uid and allow_search:
+                elif user.id and allow_search:
                     self.logger.debug("Fetching users")
                     async for found_user in self.client.iter_participants(self.group):
-                        if found_user.uid == user.uid:
+                        if found_user.id == user.id:
                             break
                     else:
                         raise Unavailable(
