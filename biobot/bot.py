@@ -459,56 +459,62 @@ class BioBot:
             level = int(event.pattern_match[1] or 0)
             entries = log.getMemoryHandler().dumps(level)
             if entries:
+                # fmt: off
                 logs = (
                     "<!DOCTYPE html>"
                     "<html>"
-                    "<head>"
-                    "<style>"
-                    # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA 4.0 by Rounin
-                    + (
-                        "pre {"
-                        "white-space: pre-wrap;"
-                        "}"
-                        "pre::before {"
-                        "counter-reset: listing;"
-                        "}"
-                        "code {"
-                        "counter-increment: listing;"
-                        "text-align: left;"
-                        "float: left;"
-                        "clear: left;"
-                        "margin-left: 4em;"
-                        "width: 100%;"
-                        "}"
-                        "code::before {"
-                        'content: counter(listing) ". ";'
-                        "display: block;"
-                        "float: left;"
-                        "text-align: right;"
-                        "width: 4em;"
-                        "margin-left: -4em;"
-                        "}"
-                        "code>br {"
-                        "display: none;"
-                        "}"
-                        # end of CC BY-SA 4.0 code
-                        # effectively adding a 1em margin below the element, but without affecting selections
-                        "code::after {"
-                        "height: 1em;"
-                        "display: block;"
-                        'content: "";'
-                        "}"
-                    )
-                    .replace(": ", ":")
-                    .replace(" {", "{")
-                    .replace(";}", "}")
-                    + "</style>"
-                    "</head>"
-                    "<body>"
-                    '<pre class="code">\n' + "".join(entries) + "\n</pre>"
-                    "</body>"
+                      "<head>"
+                        "<style>"
+                          # adapted from https://stackoverflow.com/a/41309213/5509575, CC BY-SA 4.0 by Rounin
+                          + (
+                          "pre {"
+                            "white-space: pre-wrap;"
+                          "}"
+
+                          "pre::before {"
+                            "counter-reset: listing;"
+                          "}"
+
+                          "code {"
+                            "counter-increment: listing;"
+                            "text-align: left;"
+                            "float: left;"
+                            "clear: left;"
+                            "margin-left: 4em;"
+                            "width: 100%;"
+                          "}"
+
+                          "code::before {"
+                            "content: counter(listing) \". \";"
+                            "display: block;"
+                            "float: left;"
+                            "text-align: right;"
+                            "width: 4em;"
+                            "margin-left: -4em;"
+                          "}"
+
+                          "code>br {"
+                            "display: none;"
+                          "}"
+                          # end of CC BY-SA 4.0 code
+
+                          # effectively adding a 1em margin below the element, but without affecting selections
+                          "code::after {"
+                            "height: 1em;"
+                            "display: block;"
+                            "content: \"\";"
+                          "}"
+                          ).replace(": ", ":").replace(" {", "{").replace(";}", "}") +
+                        "</style>"
+                      "</head>"
+                      "<body>"
+                        "<pre class=\"code\">\n"
+                          + "".join(entries) +
+                        "\n</pre>"
+                      "</body>"
                     "</html>"
                 ).encode("utf-8")
+                # fmt: on
                 file = io.BytesIO(logs)
                 file.name = "logs.html"
                 await self.client.send_message(event.sender_id, file=file)
