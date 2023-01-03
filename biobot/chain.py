@@ -24,9 +24,8 @@ import networkx
 
 from biobot.user import FullUser, get_key, node_to_user
 
-"""Converts the username:bio dict to a tree of users, and optionally a list"""
 
-
+# region Legacy Forest format
 class Forest:
     def __init__(self):
         self._instances = {}
@@ -108,6 +107,32 @@ class User:
         return "User(username=" + repr(self.username) + ", uid=" + repr(self.uid) + ")"
 
 
+def unpickle_data(data: bytes) -> networkx.DiGraph:
+    graph = networkx.DiGraph()
+    data = pickle.loads(data)
+    data_dict = data.get_dict()
+    for uid, username in data_dict:
+        graph.add_node(
+            username.casefold() if username else uid,
+            username=username,
+            uid=uid,
+            deleted=None,
+        )
+    for (uid, username), children in data_dict.items():
+        name = username.casefold() if username else uid
+        for child in children:
+            child_name = child.casefold()
+            if child_name not in graph:
+                graph.add_node(child_name, username=child, uid=None, deleted=None)
+            graph.add_edge(name, child_name)
+    for node in data.get_nodes():
+        name = node.username.casefold() if node.username else node.uid
+        graph.nodes[name]["deleted"] = None
+    return graph
+# endregion
+
+
+# region GML serializers
 def _destringize(data):
     if data == "_biobot_empty_list":
         return []
@@ -123,6 +148,7 @@ def _stringize(data):
     if isinstance(data, (str, bool, types.NoneType)):
         return repr(data)
     raise ValueError
+# endregion
 
 
 def make_graph(data) -> networkx.DiGraph:
@@ -136,6 +162,7 @@ def make_graph(data) -> networkx.DiGraph:
     return full_users_to_graph(data)
 
 
+# region Graph generation
 def full_users_to_graph(data: list[FullUser]) -> networkx.DiGraph:
     graph = networkx.DiGraph(version=0)
     username_to_key = {}
@@ -160,6 +187,12 @@ def full_users_to_graph(data: list[FullUser]) -> networkx.DiGraph:
                 )
             graph.add_edge(entry.key, child_key)
     return graph
+# endregion
+
+
+# region Graph serialization and deserialization
+def write(graph: networkx.DiGraph, data: io.BytesIO):
+    networkx.write_gml(graph, data, stringizer=_stringize)
 
 
 def parse_gml(data: bytes) -> networkx.DiGraph:
@@ -177,8 +210,10 @@ def fix_types(graph: networkx.DiGraph):
             if node["deleted"] is not None:
                 assert node["deleted"] in (0, 1), node["deleted"]
                 node["deleted"] = bool(node["deleted"])
+# endregion
 
 
+# region Graph version upgrades
 def upgrade_graph(graph: networkx.DiGraph) -> networkx.DiGraph:
     if "version" not in graph.graph:
         graph = upgrade_graph_v0(graph)
@@ -212,32 +247,10 @@ def upgrade_graph_v0(graph: networkx.DiGraph) -> networkx.DiGraph:
     networkx.relabel_nodes(graph, mapping, False)
     graph.graph["version"] = 0
     return graph
+# endregion
 
 
-def unpickle_data(data: bytes) -> networkx.DiGraph:
-    graph = networkx.DiGraph()
-    data = pickle.loads(data)
-    data_dict = data.get_dict()
-    for uid, username in data_dict:
-        graph.add_node(
-            username.casefold() if username else uid,
-            username=username,
-            uid=uid,
-            deleted=None,
-        )
-    for (uid, username), children in data_dict.items():
-        name = username.casefold() if username else uid
-        for child in children:
-            child_name = child.casefold()
-            if child_name not in graph:
-                graph.add_node(child_name, username=child, uid=None, deleted=None)
-            graph.add_edge(name, child_name)
-    for node in data.get_nodes():
-        name = node.username.casefold() if node.username else node.uid
-        graph.nodes[name]["deleted"] = None
-    return graph
-
-
+# region Graph traversals
 def _score_node(val):
     name, score = val
     if isinstance(name, int):
@@ -344,7 +357,4 @@ def make_all_chains(data: networkx.DiGraph) -> list[list[FullUser]]:
         ret.append([node_to_user(cut.nodes[user]) for user in longest])
         cut.remove_nodes_from(longest)
     return ret
-
-
-def write(graph: networkx.DiGraph, data: io.BytesIO):
-    networkx.write_gml(graph, data, stringizer=_stringize)
+# endregion
