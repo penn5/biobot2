@@ -406,18 +406,18 @@ def draw_chain_diff(old_data, new_data, target, format, extension=None):
             mat = np.array([[cosine, -sine], [sine, cosine]])
             np.matmul(this_component_pos_v, mat, out=this_component_pos_v)
 
-        if len(sg) <= 2:
-            # we don't need to check for negative coordinates if there are no edges, because we created the coordinates ourselves
-
-            component_pos[component] = this_component_pos
-            component_pos_v[component] = this_component_pos.values()
-        else:
-            mins = np.amin(this_component_pos_v, axis=0)
-            this_component_pos_v -= mins  # remove negative coordinates
+            # We don't need to check for negative coordinates if len(sg) <= 2
+            # because we created the coordinates ourselves.
+            if len(sg) > 2:
+                mins = np.amin(this_component_pos_v, axis=0)
+                this_component_pos_v -= mins  # remove negative coordinates
 
             scaled = dict(zip(this_component_pos, this_component_pos_v))
             component_pos[component] = scaled
             component_pos_v[component] = this_component_pos_v.tolist()
+        else:
+            component_pos[component] = this_component_pos
+            component_pos_v[component] = this_component_pos.values()
 
     logger.debug("All components prepared. Laying out...")
     component_off = dict(
