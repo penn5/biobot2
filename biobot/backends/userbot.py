@@ -122,7 +122,7 @@ class UserbotBackend(JoinedUsersGetterBackend, BioTextGetterBackend):
                     ):
                         parsed_found_user = self.get_user(found_user)
                         if any(
-                            found_username.username.casefold() == username
+                            found_username.casefold() == username
                             for found_username in parsed_found_user.usernames
                         ):
                             break

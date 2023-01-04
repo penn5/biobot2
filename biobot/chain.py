@@ -129,6 +129,8 @@ def unpickle_data(data: bytes) -> networkx.DiGraph:
         name = node.username.casefold() if node.username else node.uid
         graph.nodes[name]["deleted"] = None
     return graph
+
+
 # endregion
 
 
@@ -148,6 +150,8 @@ def _stringize(data):
     if isinstance(data, (str, bool, types.NoneType)):
         return repr(data)
     raise ValueError
+
+
 # endregion
 
 
@@ -187,6 +191,8 @@ def full_users_to_graph(data: list[FullUser]) -> networkx.DiGraph:
                 )
             graph.add_edge(entry.key, child_key)
     return graph
+
+
 # endregion
 
 
@@ -210,6 +216,8 @@ def fix_types(graph: networkx.DiGraph):
             if node["deleted"] is not None:
                 assert node["deleted"] in (0, 1), node["deleted"]
                 node["deleted"] = bool(node["deleted"])
+
+
 # endregion
 
 
@@ -247,6 +255,8 @@ def upgrade_graph_v0(graph: networkx.DiGraph) -> networkx.DiGraph:
     networkx.relabel_nodes(graph, mapping, False)
     graph.graph["version"] = 0
     return graph
+
+
 # endregion
 
 
@@ -357,4 +367,6 @@ def make_all_chains(data: networkx.DiGraph) -> list[list[FullUser]]:
         ret.append([node_to_user(cut.nodes[user]) for user in longest])
         cut.remove_nodes_from(longest)
     return ret
+
+
 # endregion
