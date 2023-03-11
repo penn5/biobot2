@@ -360,10 +360,17 @@ def draw_chain_diff(old_data, new_data, target, format, extension=None):
             # shortest weighted undirected path in the component
             dist = dict(
                 nx.shortest_path_length(
-                    nx.classes.graphviews.generic_graph_view(sg, nx.Graph),
+                    sg,
                     weight="layout_weight",
                 )
             )
+            for source in dist:
+                for dest in dist:
+                    if source in dist[dest]:
+                        if dest not in dist[source]:
+                            dist[source][dest] = dist[dest][source]
+                        elif dist[source][dest] > dist[dest][source]:
+                            dist[source][dest] = dist[dest][source]
             logger.debug(dist)
             this_component_pos = nx.kamada_kawai_layout(sg, dist=dist)
         if edges:
