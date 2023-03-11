@@ -9,4 +9,3 @@ grapheme~=0.6.0
 coloredlogs~=15.0.1
 regex~=2022.10.31
 numpy~=1.23.5
-poeditor~=1.1.3
