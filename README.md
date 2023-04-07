@@ -36,7 +36,7 @@ Diffs are calculated with set operations which in themselves are not very compli
 
 ### Configuration
 
-Unfortunately the configuration files are written in JSON. Oops. However, they are structured quite elegantly. Be careful, an untrusted config file may lead to code execution. Here is an example:
+Unfortunately the configuration files are written in JSON. Oops. However, they are structured quite elegantly. Be careful, an untrusted config file may lead to code execution. Here is an example (there is another in `config.sample.json`):
 
 ```json
 {
